@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,13 +43,11 @@ import com.google.common.cache.Cache;
 
 public abstract class FileOperations {
 
-  private static final String HADOOP_JOBHISTORY_LOCATION = "_logs"; // dir related to
-                                                                    // hadoop.job.history.user.location
+  private static final String HADOOP_JOBHISTORY_LOCATION = "_logs";
 
   private static final Set<String> validExtensions =
       Set.of(Constants.MAPFILE_EXTENSION, RFile.EXTENSION);
 
-  // Sometimes we want to know what files accumulo bulk processing creates
   private static final Set<String> bulkWorkingFiles =
       Set.of(Constants.BULK_LOAD_MAPPING, Constants.BULK_RENAME_FILE,
           FileOutputCommitter.SUCCEEDED_FILE_NAME, HADOOP_JOBHISTORY_LOCATION);
@@ -69,10 +68,6 @@ public abstract class FileOperations {
     return new DispatchingFileFactory();
   }
 
-  //
-  // Abstract methods (to be implemented by subclasses)
-  //
-
   protected abstract long getFileSize(FileOptions options) throws IOException;
 
   protected abstract FileSKVWriter openWriter(FileOptions options) throws IOException;
@@ -83,103 +78,35 @@ public abstract class FileOperations {
 
   protected abstract FileSKVIterator openReader(FileOptions options) throws IOException;
 
-  //
-  // File operations
-  //
-
-  /**
-   * Construct an operation object allowing one to create a writer for a file. <br>
-   * Syntax:
-   *
-   * <pre>
-   * FileSKVWriter writer = fileOperations.newWriterBuilder()
-   *     .forFile(...)
-   *     .withTableConfiguration(...)
-   *     .withRateLimiter(...) // optional
-   *     .withCompression(...) // optional
-   *     .build();
-   * </pre>
-   */
   public WriterBuilder newWriterBuilder() {
     return new WriterBuilder();
   }
 
-  /**
-   * Construct an operation object allowing one to create an index iterator for a file. <br>
-   * Syntax:
-   *
-   * <pre>
-   * FileSKVIterator iterator = fileOperations.newIndexReaderBuilder()
-   *     .forFile(...)
-   *     .withTableConfiguration(...)
-   *     .withRateLimiter(...) // optional
-   *     .withBlockCache(...) // optional
-   *     .build();
-   * </pre>
-   */
   public IndexReaderBuilder newIndexReaderBuilder() {
     return new IndexReaderBuilder();
   }
 
-  /**
-   * Construct an operation object allowing one to create a "scan" reader for a file. Scan readers
-   * do not have any optimizations for seeking beyond their initial position. This is useful for
-   * file operations that only need to scan data within a range and do not need to seek. Therefore
-   * file metadata such as indexes does not need to be kept in memory while the file is scanned.
-   * Also seek optimizations like bloom filters do not need to be loaded. <br>
-   * Syntax:
-   *
-   * <pre>
-   * FileSKVIterator scanner = fileOperations.newScanReaderBuilder()
-   *     .forFile(...)
-   *     .withTableConfiguration(...)
-   *     .overRange(...)
-   *     .withRateLimiter(...) // optional
-   *     .withBlockCache(...) // optional
-   *     .build();
-   * </pre>
-   */
   public ScanReaderBuilder newScanReaderBuilder() {
     return new ScanReaderBuilder();
   }
 
-  /**
-   * Construct an operation object allowing one to create a reader for a file. A reader constructed
-   * in this manner fully supports seeking, and also enables any optimizations related to seeking
-   * (e.g. Bloom filters). <br>
-   * Syntax:
-   *
-   * <pre>
-   * FileSKVIterator scanner = fileOperations.newReaderBuilder()
-   *     .forFile(...)
-   *     .withTableConfiguration(...)
-   *     .withRateLimiter(...) // optional
-   *     .withBlockCache(...) // optional
-   *     .seekToBeginning(...) // optional
-   *     .build();
-   * </pre>
-   */
   public ReaderBuilder newReaderBuilder() {
     return new ReaderBuilder();
   }
 
   public static class FileOptions {
-    // objects used by all
     public final AccumuloConfiguration tableConfiguration;
     public final String filename;
     public final FileSystem fs;
     public final Configuration fsConf;
     public final RateLimiter rateLimiter;
-    // writer only objects
     public final String compression;
     public final FSDataOutputStream outputStream;
     public final boolean enableAccumuloStart;
-    // reader only objects
     public final CacheProvider cacheProvider;
     public final Cache<String,Long> fileLenCache;
     public final boolean seekToBeginning;
     public final CryptoService cryptoService;
-    // scan reader only objects
     public final Range range;
     public final Set<ByteSequence> columnFamilies;
     public final boolean inclusive;
@@ -269,9 +196,6 @@ public abstract class FileOperations {
     }
   }
 
-  /**
-   * Helper class extended by both writers and readers.
-   */
   public static class FileHelper {
     private AccumuloConfiguration tableConfiguration;
     private String filename;
@@ -348,9 +272,6 @@ public abstract class FileOperations {
     }
   }
 
-  /**
-   * Operation object for constructing a writer.
-   */
   public class WriterBuilder extends FileHelper implements WriterTableConfiguration {
     private String compression;
     private FSDataOutputStream outputStream;
@@ -404,9 +325,6 @@ public abstract class FileOperations {
     public WriterBuilder withTableConfiguration(AccumuloConfiguration tableConfiguration);
   }
 
-  /**
-   * Options common to all {@code FileOperations} which perform reads.
-   */
   public class ReaderBuilder extends FileHelper implements ReaderTableConfiguration {
     private CacheProvider cacheProvider;
     private Cache<String,Long> fileLenCache;
@@ -424,10 +342,6 @@ public abstract class FileOperations {
       return this;
     }
 
-    /**
-     * (Optional) Set the block cache pair to be used to optimize reads within the constructed
-     * reader.
-     */
     public ReaderBuilder withCacheProvider(CacheProvider cacheProvider) {
       this.cacheProvider = cacheProvider;
       return this;
@@ -448,22 +362,16 @@ public abstract class FileOperations {
       return this;
     }
 
-    /**
-     * Seek the constructed iterator to the beginning of its domain before returning. Equivalent to
-     * {@code seekToBeginning(true)}.
-     */
     public ReaderBuilder seekToBeginning() {
       seekToBeginning(true);
       return this;
     }
 
-    /** If true, seek the constructed iterator to the beginning of its domain before returning. */
     public ReaderBuilder seekToBeginning(boolean seekToBeginning) {
       this.seekToBeginning = seekToBeginning;
       return this;
     }
 
-    /** Execute the operation, constructing the specified file reader. */
     public FileSKVIterator build() throws IOException {
       return openReader(toReaderBuilderOptions(cacheProvider, fileLenCache, seekToBeginning));
     }
@@ -473,9 +381,6 @@ public abstract class FileOperations {
     ReaderBuilder withTableConfiguration(AccumuloConfiguration tableConfiguration);
   }
 
-  /**
-   * Operation object for opening an index.
-   */
   public class IndexReaderBuilder extends FileHelper implements IndexReaderTableConfiguration {
 
     private Cache<String,Long> fileLenCache = null;
@@ -506,7 +411,6 @@ public abstract class FileOperations {
     IndexReaderBuilder withTableConfiguration(AccumuloConfiguration tableConfiguration);
   }
 
-  /** Operation object for opening a scan reader. */
   public class ScanReaderBuilder extends FileHelper implements ScanReaderTableConfiguration {
     private Range range;
     private Set<ByteSequence> columnFamilies;
@@ -524,7 +428,6 @@ public abstract class FileOperations {
       return this;
     }
 
-    /** Set the range over which the constructed iterator will search. */
     public ScanReaderBuilder overRange(Range range, Set<ByteSequence> columnFamilies,
         boolean inclusive) {
       Objects.requireNonNull(range);
@@ -535,7 +438,6 @@ public abstract class FileOperations {
       return this;
     }
 
-    /** Execute the operation, constructing a scan iterator. */
     public FileSKVIterator build() throws IOException {
       return openScanReader(toScanReaderBuilderOptions(range, columnFamilies, inclusive));
     }
