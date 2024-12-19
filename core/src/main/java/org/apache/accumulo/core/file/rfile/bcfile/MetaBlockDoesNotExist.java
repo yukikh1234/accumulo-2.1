@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,16 +28,13 @@ import java.io.UncheckedIOException;
 public class MetaBlockDoesNotExist extends IOException {
   private static final long serialVersionUID = -1365588883639715005L;
 
-  /**
-   * Constructor
-   *
-   * @param s message.
-   */
-  MetaBlockDoesNotExist(String s) {
-    super(s);
+  // Constructor with a message parameter
+  public MetaBlockDoesNotExist(String message) {
+    super(message);
   }
 
-  public MetaBlockDoesNotExist(UncheckedIOException uioe) {
-    super(uioe);
+  // Constructor with an UncheckedIOException parameter
+  public MetaBlockDoesNotExist(UncheckedIOException cause) {
+    super(cause);
   }
 }
