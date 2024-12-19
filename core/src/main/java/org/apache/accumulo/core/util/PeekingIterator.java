@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -22,61 +23,43 @@ import java.util.Iterator;
 
 public class PeekingIterator<E> implements Iterator<E> {
 
-  boolean isInitialized;
-  Iterator<E> source;
-  E top;
+  private boolean isInitialized;
+  private Iterator<E> source;
+  private E nextElement;
 
   public PeekingIterator(Iterator<E> source) {
-    this.source = source;
-    if (source.hasNext()) {
-      top = source.next();
-    } else {
-      top = null;
-    }
-    isInitialized = true;
+    initializeWithSource(source);
   }
 
-  /**
-   * Creates an uninitialized instance. This should be used in conjunction with
-   * {@link #initialize(Iterator)}.
-   */
   public PeekingIterator() {
-    isInitialized = false;
+    this.isInitialized = false;
   }
 
-  /**
-   * Initializes this iterator, to be used with {@link #PeekingIterator()}.
-   */
   public PeekingIterator<E> initialize(Iterator<E> source) {
-    this.source = source;
-    if (source.hasNext()) {
-      top = source.next();
-    } else {
-      top = null;
-    }
-    isInitialized = true;
+    initializeWithSource(source);
     return this;
   }
 
-  public E peek() {
-    if (!isInitialized) {
-      throw new IllegalStateException("Iterator has not yet been initialized");
+  private void initializeWithSource(Iterator<E> source) {
+    if (source == null) {
+      throw new IllegalArgumentException("Source iterator cannot be null");
     }
-    return top;
+    this.source = source;
+    this.nextElement = source.hasNext() ? source.next() : null;
+    this.isInitialized = true;
+  }
+
+  public E peek() {
+    ensureInitialized();
+    return nextElement;
   }
 
   @Override
   public E next() {
-    if (!isInitialized) {
-      throw new IllegalStateException("Iterator has not yet been initialized");
-    }
-    E lastPeeked = top;
-    if (source.hasNext()) {
-      top = source.next();
-    } else {
-      top = null;
-    }
-    return lastPeeked;
+    ensureInitialized();
+    E currentElement = nextElement;
+    nextElement = source.hasNext() ? source.next() : null;
+    return currentElement;
   }
 
   @Override
@@ -86,9 +69,13 @@ public class PeekingIterator<E> implements Iterator<E> {
 
   @Override
   public boolean hasNext() {
+    ensureInitialized();
+    return nextElement != null;
+  }
+
+  private void ensureInitialized() {
     if (!isInitialized) {
       throw new IllegalStateException("Iterator has not yet been initialized");
     }
-    return top != null;
   }
 }
