@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.map;
 
 import java.io.DataInputStream;
@@ -46,7 +29,7 @@ public class MapFileOperations extends FileOperations {
 
   public static class RangeIterator implements FileSKVIterator {
 
-    SortedKeyValueIterator<Key,Value> reader;
+    private final SortedKeyValueIterator<Key,Value> reader;
     private Range range;
     private boolean hasTop;
 
@@ -87,7 +70,7 @@ public class MapFileOperations extends FileOperations {
     @Override
     public Key getTopKey() {
       if (!hasTop) {
-        throw new IllegalStateException();
+        throw new IllegalStateException("No top key available");
       }
       return reader.getTopKey();
     }
@@ -95,7 +78,7 @@ public class MapFileOperations extends FileOperations {
     @Override
     public Value getTopValue() {
       if (!hasTop) {
-        throw new IllegalStateException();
+        throw new IllegalStateException("No top value available");
       }
       return reader.getTopValue();
     }
@@ -114,10 +97,10 @@ public class MapFileOperations extends FileOperations {
     @Override
     public void next() throws IOException {
       if (!hasTop) {
-        throw new IllegalStateException();
+        throw new IllegalStateException("No top element to move next");
       }
       reader.next();
-      hasTop = reader.hasTop() && !range.afterEndKey(reader.getTopKey());
+      updateHasTop();
     }
 
     @Override
@@ -125,12 +108,15 @@ public class MapFileOperations extends FileOperations {
         throws IOException {
       reader.seek(range, columnFamilies, inclusive);
       this.range = range;
-
-      hasTop = reader.hasTop() && !range.afterEndKey(reader.getTopKey());
+      updateHasTop();
 
       while (hasTop() && range.beforeStartKey(getTopKey())) {
         next();
       }
+    }
+
+    private void updateHasTop() {
+      hasTop = reader.hasTop() && !range.afterEndKey(reader.getTopKey());
     }
 
     @Override
@@ -149,7 +135,9 @@ public class MapFileOperations extends FileOperations {
     }
 
     @Override
-    public void setCacheProvider(CacheProvider cacheProvider) {}
+    public void setCacheProvider(CacheProvider cacheProvider) {
+      // Intentionally left blank
+    }
   }
 
   @Override
