@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -43,12 +44,13 @@ import org.slf4j.LoggerFactory;
  * class.
  */
 public class VisibilityFilter extends SynchronizedServerFilter {
+  private static final Logger log = LoggerFactory.getLogger(VisibilityFilter.class);
+  private static final int CACHE_SIZE = 1000;
+
   protected VisibilityEvaluator ve;
   protected ByteSequence defaultVisibility;
   protected LRUMap<ByteSequence,Boolean> cache;
   protected Authorizations authorizations;
-
-  private static final Logger log = LoggerFactory.getLogger(VisibilityFilter.class);
 
   private VisibilityFilter(SortedKeyValueIterator<Key,Value> iterator,
       Authorizations authorizations, byte[] defaultVisibility) {
@@ -56,7 +58,7 @@ public class VisibilityFilter extends SynchronizedServerFilter {
     this.ve = new VisibilityEvaluator(authorizations);
     this.authorizations = authorizations;
     this.defaultVisibility = new ArrayByteSequence(defaultVisibility);
-    this.cache = new LRUMap<>(1000);
+    this.cache = new LRUMap<>(CACHE_SIZE);
   }
 
   @Override
@@ -66,28 +68,33 @@ public class VisibilityFilter extends SynchronizedServerFilter {
 
   @Override
   protected boolean accept(Key k, Value v) {
-    ByteSequence testVis = k.getColumnVisibilityData();
+    ByteSequence testVis = getEffectiveVisibility(k);
 
-    if (testVis.length() == 0 && defaultVisibility.length() == 0) {
-      return true;
-    } else if (testVis.length() == 0) {
-      testVis = defaultVisibility;
+    Boolean cachedResult = cache.get(testVis);
+    if (cachedResult != null) {
+      return cachedResult;
     }
 
-    Boolean b = cache.get(testVis);
-    if (b != null) {
-      return b;
-    }
+    boolean result = evaluateVisibility(testVis, k);
+    cache.put(testVis, result);
+    return result;
+  }
 
+  private ByteSequence getEffectiveVisibility(Key k) {
+    ByteSequence columnVisibility = k.getColumnVisibilityData();
+    if (columnVisibility.length() == 0 && defaultVisibility.length() == 0) {
+      return columnVisibility;
+    } else if (columnVisibility.length() == 0) {
+      return defaultVisibility;
+    }
+    return columnVisibility;
+  }
+
+  private boolean evaluateVisibility(ByteSequence visibility, Key k) {
     try {
-      boolean bb = ve.evaluate(new ColumnVisibility(testVis.toArray()));
-      cache.put(testVis, bb);
-      return bb;
-    } catch (VisibilityParseException e) {
-      log.error("VisibilityParseException with visibility of Key: {}", k, e);
-      return false;
-    } catch (BadArgumentException e) {
-      log.error("BadArgumentException with visibility of Key: {}", k, e);
+      return ve.evaluate(new ColumnVisibility(visibility.toArray()));
+    } catch (VisibilityParseException | BadArgumentException e) {
+      log.error("{} with visibility of Key: {}", e.getClass().getSimpleName(), k, e);
       return false;
     }
   }
