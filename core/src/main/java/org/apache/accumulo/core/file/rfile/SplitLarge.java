@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.util.ArrayList;
@@ -77,42 +60,61 @@ public class SplitLarge implements KeywordExecutable {
     opts.parseArgs("accumulo split-large", args);
 
     for (String file : opts.files) {
-      AccumuloConfiguration aconf = opts.getSiteConfiguration();
-      CryptoService cs = CryptoFactoryLoader.getServiceForServer(aconf);
-      Path path = new Path(file);
-      CachableBuilder cb = new CachableBuilder().fsPath(fs, path).conf(conf).cryptoService(cs);
-      try (Reader iter = new RFile.Reader(cb)) {
-
-        if (!file.endsWith(".rf")) {
-          throw new IllegalArgumentException("File must end with .rf");
-        }
-        String smallName = file.substring(0, file.length() - 3) + "_small.rf";
-        String largeName = file.substring(0, file.length() - 3) + "_large.rf";
-
-        int blockSize = (int) aconf.getAsBytes(Property.TABLE_FILE_BLOCK_SIZE);
-        try (
-            Writer small = new RFile.Writer(
-                new BCFile.Writer(fs.create(new Path(smallName)), null, "gz", conf, cs), blockSize);
-            Writer large = new RFile.Writer(
-                new BCFile.Writer(fs.create(new Path(largeName)), null, "gz", conf, cs),
-                blockSize)) {
-          small.startDefaultLocalityGroup();
-          large.startDefaultLocalityGroup();
-
-          iter.seek(new Range(), new ArrayList<>(), false);
-          while (iter.hasTop()) {
-            Key key = iter.getTopKey();
-            Value value = iter.getTopValue();
-            if (key.getSize() + value.getSize() < opts.maxSize) {
-              small.append(key, value);
-            } else {
-              large.append(key, value);
-            }
-            iter.next();
-          }
-        }
-      }
+      processFile(conf, fs, opts, file);
     }
   }
 
+  private void processFile(Configuration conf, FileSystem fs, Opts opts, String file)
+      throws Exception {
+    AccumuloConfiguration aconf = opts.getSiteConfiguration();
+    CryptoService cs = CryptoFactoryLoader.getServiceForServer(aconf);
+    Path path = new Path(file);
+    CachableBuilder cb = new CachableBuilder().fsPath(fs, path).conf(conf).cryptoService(cs);
+    try (Reader iter = new RFile.Reader(cb)) {
+      validateFileName(file);
+      String smallName = getSmallFileName(file);
+      String largeName = getLargeFileName(file);
+      splitFile(fs, conf, cs, aconf, iter, smallName, largeName, opts.maxSize);
+    }
+  }
+
+  private void validateFileName(String file) {
+    if (!file.endsWith(".rf")) {
+      throw new IllegalArgumentException("File must end with .rf");
+    }
+  }
+
+  private String getSmallFileName(String file) {
+    return file.substring(0, file.length() - 3) + "_small.rf";
+  }
+
+  private String getLargeFileName(String file) {
+    return file.substring(0, file.length() - 3) + "_large.rf";
+  }
+
+  private void splitFile(FileSystem fs, Configuration conf, CryptoService cs,
+      AccumuloConfiguration aconf, Reader iter, String smallName, String largeName, long maxSize)
+      throws Exception {
+    int blockSize = (int) aconf.getAsBytes(Property.TABLE_FILE_BLOCK_SIZE);
+    try (
+        Writer small = new RFile.Writer(
+            new BCFile.Writer(fs.create(new Path(smallName)), null, "gz", conf, cs), blockSize);
+        Writer large = new RFile.Writer(
+            new BCFile.Writer(fs.create(new Path(largeName)), null, "gz", conf, cs), blockSize)) {
+
+      small.startDefaultLocalityGroup();
+      large.startDefaultLocalityGroup();
+      iter.seek(new Range(), new ArrayList<>(), false);
+      while (iter.hasTop()) {
+        Key key = iter.getTopKey();
+        Value value = iter.getTopValue();
+        if (key.getSize() + value.getSize() < maxSize) {
+          small.append(key, value);
+        } else {
+          large.append(key, value);
+        }
+        iter.next();
+      }
+    }
+  }
 }
