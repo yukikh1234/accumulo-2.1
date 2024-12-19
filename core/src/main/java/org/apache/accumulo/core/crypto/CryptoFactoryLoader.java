@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.crypto;
 
 import static org.apache.accumulo.core.crypto.CryptoFactoryLoader.ClassloaderType.ACCUMULO;
@@ -41,80 +42,68 @@ public class CryptoFactoryLoader {
   private static final CryptoServiceFactory NO_CRYPTO_FACTORY = new NoCryptoServiceFactory();
 
   enum ClassloaderType {
-    // Use the Accumulo custom classloader. Should only be used by Accumulo server side code.
-    ACCUMULO,
-    // Use basic Java classloading mechanism. Should be use by Accumulo client code.
-    JAVA
+    ACCUMULO, JAVA
   }
 
-  /**
-   * Creates a new server Factory.
-   */
   public static CryptoServiceFactory newInstance(AccumuloConfiguration conf) {
-    String clazzName = conf.get(Property.INSTANCE_CRYPTO_FACTORY);
-    return loadCryptoFactory(ACCUMULO, clazzName);
+    return loadCryptoFactory(ACCUMULO, conf.get(Property.INSTANCE_CRYPTO_FACTORY));
   }
 
-  /**
-   * For use by server utilities not associated with a table. Requires Instance, general and table
-   * configuration. Creates a new Factory from the configuration and gets the CryptoService from
-   * that Factory.
-   */
   public static CryptoService getServiceForServer(AccumuloConfiguration conf) {
     var env = new CryptoEnvironmentImpl(TABLE, null, null);
-    CryptoServiceFactory factory = newInstance(conf);
-    var allCryptoProperties = conf.getAllCryptoProperties();
-    return factory.getService(env, allCryptoProperties);
+    var factory = newInstance(conf);
+    return factory.getService(env, conf.getAllCryptoProperties());
   }
 
-  /**
-   * Returns a CryptoService configured for the scope using the properties. This is used for client
-   * operations not associated with a table, either for r-files (TABLE scope) or WALs. The
-   * GenericCryptoServiceFactory is used for loading the CryptoService.
-   */
   public static CryptoService getServiceForClient(CryptoEnvironment.Scope scope,
       Map<String,String> properties) {
     var factory = loadCryptoFactory(JAVA, GenericCryptoServiceFactory.class.getName());
-    CryptoEnvironment env = new CryptoEnvironmentImpl(scope, null, null);
+    var env = new CryptoEnvironmentImpl(scope, null, null);
     return factory.getService(env, properties);
   }
 
-  /**
-   * For use by client code, in a Table context.
-   */
   public static CryptoService getServiceForClientWithTable(Map<String,String> systemConfig,
       Map<String,String> tableProps, TableId tableId) {
-    String factoryKey = Property.INSTANCE_CRYPTO_FACTORY.getKey();
-    String clazzName = systemConfig.get(factoryKey);
-    if (clazzName == null || clazzName.trim().isEmpty()) {
+    String clazzName = getFactoryClassName(systemConfig);
+    if (clazzName == null) {
       return NoCryptoServiceFactory.NONE;
     }
 
     var env = new CryptoEnvironmentImpl(TABLE, tableId, null);
-    CryptoServiceFactory factory = loadCryptoFactory(JAVA, clazzName);
+    var factory = loadCryptoFactory(JAVA, clazzName);
     return factory.getService(env, tableProps);
+  }
+
+  private static String getFactoryClassName(Map<String,String> config) {
+    String clazzName = config.get(Property.INSTANCE_CRYPTO_FACTORY.getKey());
+    return (clazzName == null || clazzName.trim().isEmpty()) ? null : clazzName;
   }
 
   private static CryptoServiceFactory loadCryptoFactory(ClassloaderType ct, String clazzName) {
     log.debug("Creating new crypto factory class {}", clazzName);
-    CryptoServiceFactory newCryptoServiceFactory;
     if (ct == ACCUMULO) {
-      newCryptoServiceFactory = ConfigurationTypeHelper.getClassInstance(null, clazzName,
-          CryptoServiceFactory.class, new NoCryptoServiceFactory());
+      return loadAccumuloCryptoFactory(clazzName);
     } else if (ct == JAVA) {
-      if (clazzName == null || clazzName.trim().isEmpty()) {
-        newCryptoServiceFactory = NO_CRYPTO_FACTORY;
-      } else {
-        try {
-          newCryptoServiceFactory = CryptoFactoryLoader.class.getClassLoader().loadClass(clazzName)
-              .asSubclass(CryptoServiceFactory.class).getDeclaredConstructor().newInstance();
-        } catch (ReflectiveOperationException e) {
-          throw new RuntimeException(e);
-        }
-      }
+      return loadJavaCryptoFactory(clazzName);
     } else {
       throw new IllegalArgumentException();
     }
-    return newCryptoServiceFactory;
+  }
+
+  private static CryptoServiceFactory loadAccumuloCryptoFactory(String clazzName) {
+    return ConfigurationTypeHelper.getClassInstance(null, clazzName, CryptoServiceFactory.class,
+        new NoCryptoServiceFactory());
+  }
+
+  private static CryptoServiceFactory loadJavaCryptoFactory(String clazzName) {
+    if (clazzName == null || clazzName.trim().isEmpty()) {
+      return NO_CRYPTO_FACTORY;
+    }
+    try {
+      return CryptoFactoryLoader.class.getClassLoader().loadClass(clazzName)
+          .asSubclass(CryptoServiceFactory.class).getDeclaredConstructor().newInstance();
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
   }
 }
