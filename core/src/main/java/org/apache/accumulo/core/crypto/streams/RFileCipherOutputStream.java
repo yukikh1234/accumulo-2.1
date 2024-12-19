@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.crypto.streams;
 
 import java.io.IOException;
@@ -31,15 +14,8 @@ import javax.crypto.CipherOutputStream;
  */
 public class RFileCipherOutputStream extends CipherOutputStream {
 
-  // This is the maximum size encrypted stream that can be written. Attempting to write anything
-  // larger
-  // will cause an exception. Given that each block in an rfile is encrypted separately, and blocks
-  // should be written such that a block cannot ever reach 16GiB, this is believed to be a safe
-  // number.
-  // If this does cause an exception, it is an issue best addressed elsewhere.
-  private final long maxOutputSize = 1L << 34; // 16GiB
+  private static final long MAX_OUTPUT_SIZE = 1L << 34; // 16GiB
 
-  // The total number of bytes that have been written out
   private long count = 0;
 
   /**
@@ -53,17 +29,17 @@ public class RFileCipherOutputStream extends CipherOutputStream {
     super(os, c);
   }
 
-  /**
-   * Override of CipherOutputStream's write to count the number of bytes that have been encrypted.
-   * This method now throws an exception if an attempt to write bytes beyond a maximum is made.
-   */
+  private void checkCount(long increment) throws IOException {
+    count += increment;
+    if (count > MAX_OUTPUT_SIZE) {
+      throw new IOException("Attempt to write " + count + " bytes was made. A maximum of "
+          + MAX_OUTPUT_SIZE + " is allowed for an encryption stream.");
+    }
+  }
+
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
-    count += len;
-    if (count > maxOutputSize) {
-      throw new IOException("Attempt to write " + count + " bytes was made. A maximum of "
-          + maxOutputSize + " is allowed for an encryption stream.");
-    }
+    checkCount(len);
     super.write(b, off, len);
   }
 
@@ -72,17 +48,9 @@ public class RFileCipherOutputStream extends CipherOutputStream {
     write(b, 0, b.length);
   }
 
-  /**
-   * Override of CipherOutputStream's write for a single byte to count it. This method now throws an
-   * exception if an attempt to write bytes beyond a maximum is made.
-   */
   @Override
   public void write(int b) throws IOException {
-    count++;
-    if (count > maxOutputSize) {
-      throw new IOException("Attempt to write " + count + " bytes was made. A maximum of "
-          + maxOutputSize + " is allowed for an encryption stream.");
-    }
+    checkCount(1);
     super.write(b);
   }
 }
