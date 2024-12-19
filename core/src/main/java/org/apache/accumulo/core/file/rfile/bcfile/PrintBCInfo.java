@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile.bcfile;
 
 import java.io.IOException;
@@ -47,23 +30,29 @@ public class PrintBCInfo {
   CryptoService cryptoService = NoCryptoServiceFactory.NONE;
 
   public void printMetaBlockInfo() throws IOException {
-    FSDataInputStream fsin = fs.open(path);
-    try (BCFile.Reader bcfr =
+    try (FSDataInputStream fsin = openInputStream(); BCFile.Reader bcfr =
         new BCFile.Reader(fsin, fs.getFileStatus(path).getLen(), conf, cryptoService)) {
+      printMetaBlockDetails(bcfr);
+    }
+  }
 
-      Set<Entry<String,MetaIndexEntry>> es = bcfr.metaIndex.index.entrySet();
+  private FSDataInputStream openInputStream() throws IOException {
+    return fs.open(path);
+  }
 
-      for (Entry<String,MetaIndexEntry> entry : es) {
-        PrintStream out = System.out;
-        out.println("Meta block     : " + entry.getKey());
-        out.println("      Raw size             : "
-            + String.format("%,d", entry.getValue().getRegion().getRawSize()) + " bytes");
-        out.println("      Compressed size      : "
-            + String.format("%,d", entry.getValue().getRegion().getCompressedSize()) + " bytes");
-        out.println(
-            "      Compression type     : " + entry.getValue().getCompressionAlgorithm().getName());
-        out.println();
-      }
+  private void printMetaBlockDetails(BCFile.Reader bcfr) {
+    Set<Entry<String,MetaIndexEntry>> es = bcfr.metaIndex.index.entrySet();
+    PrintStream out = System.out;
+
+    for (Entry<String,MetaIndexEntry> entry : es) {
+      out.println("Meta block     : " + entry.getKey());
+      out.println("      Raw size             : "
+          + String.format("%,d", entry.getValue().getRegion().getRawSize()) + " bytes");
+      out.println("      Compressed size      : "
+          + String.format("%,d", entry.getValue().getRegion().getCompressedSize()) + " bytes");
+      out.println(
+          "      Compression type     : " + entry.getValue().getCompressionAlgorithm().getName());
+      out.println();
     }
   }
 
@@ -73,21 +62,35 @@ public class PrintBCInfo {
   }
 
   public PrintBCInfo(String[] args) throws Exception {
+    initialize(args);
+  }
+
+  private void initialize(String[] args) throws Exception {
     Opts opts = new Opts();
     opts.parseArgs("PrintInfo", args);
+
+    validateFile(opts);
+
+    siteConfig = opts.getSiteConfiguration();
+    conf = new Configuration();
+    path = new Path(opts.file);
+    fs = determineFileSystem();
+  }
+
+  private void validateFile(Opts opts) {
     if (opts.file.isEmpty()) {
       System.err.println("No files were given");
       System.exit(-1);
     }
-    siteConfig = opts.getSiteConfiguration();
-    conf = new Configuration();
+  }
+
+  private FileSystem determineFileSystem() throws IOException {
     FileSystem hadoopFs = FileSystem.get(conf);
     FileSystem localFs = FileSystem.getLocal(conf);
-    path = new Path(opts.file);
-    if (opts.file.contains(":")) {
-      fs = path.getFileSystem(conf);
+    if (path.toString().contains(":")) {
+      return path.getFileSystem(conf);
     } else {
-      fs = hadoopFs.exists(path) ? hadoopFs : localFs; // fall back to local
+      return hadoopFs.exists(path) ? hadoopFs : localFs;
     }
   }
 
