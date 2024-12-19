@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.blockfile.cache.lru;
 
 import java.util.LinkedList;
@@ -47,10 +48,7 @@ public class CachedBlockQueue implements HeapSize {
    * @param blockSize expected average size of blocks
    */
   public CachedBlockQueue(long maxSize, long blockSize) {
-    int initialSize = (int) Math.ceil(maxSize / (double) blockSize);
-    if (initialSize == 0) {
-      initialSize++;
-    }
+    int initialSize = Math.max(1, (int) Math.ceil(maxSize / (double) blockSize));
     queue = new PriorityQueue<>(initialSize);
     heapSize = 0;
     this.maxSize = maxSize;
@@ -67,23 +65,34 @@ public class CachedBlockQueue implements HeapSize {
    * @param cb block to try to add to the queue
    */
   public void add(CachedBlock cb) {
-    if (heapSize < maxSize) {
+    if (canAddBlock(cb)) {
       queue.add(cb);
       heapSize += cb.heapSize();
     } else {
-      CachedBlock head =
-          Objects.requireNonNull(queue.peek(), "No cached blocks available from queue");
-      if (cb.compareTo(head) > 0) {
-        heapSize += cb.heapSize();
-        heapSize -= head.heapSize();
-        if (heapSize > maxSize) {
-          queue.poll();
-        } else {
-          heapSize += head.heapSize();
-        }
-        queue.add(cb);
-      }
+      attemptReplaceSmallestBlock(cb);
     }
+  }
+
+  private boolean canAddBlock(CachedBlock cb) {
+    return heapSize < maxSize;
+  }
+
+  private void attemptReplaceSmallestBlock(CachedBlock cb) {
+    CachedBlock head = queue.peek();
+    if (Objects.nonNull(head) && cb.compareTo(head) > 0) {
+      replaceBlock(cb, head);
+    }
+  }
+
+  private void replaceBlock(CachedBlock cb, CachedBlock head) {
+    heapSize += cb.heapSize();
+    heapSize -= head.heapSize();
+    if (heapSize > maxSize) {
+      queue.poll();
+    } else {
+      heapSize += head.heapSize();
+    }
+    queue.add(cb);
   }
 
   /**
