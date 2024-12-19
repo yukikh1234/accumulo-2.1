@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.blockfile.cache.impl;
 
 import java.util.Collections;
@@ -31,15 +32,10 @@ public class BlockCacheConfiguration implements Configuration {
 
   /** Approximate block size */
   private final long blockSize;
-
   private final Property serverPrefix;
-
   private final Map<String,String> genProps;
-
   private final long indexMaxSize;
-
   private final long dataMaxSize;
-
   private final long summaryMaxSize;
 
   public static BlockCacheConfiguration forTabletServer(AccumuloConfiguration conf) {
@@ -68,16 +64,16 @@ public class BlockCacheConfiguration implements Configuration {
 
   @Override
   public long getMaxSize(CacheType type) {
-    switch (type) {
-      case INDEX:
-        return indexMaxSize;
-      case DATA:
-        return dataMaxSize;
-      case SUMMARY:
-        return summaryMaxSize;
-      default:
-        throw new IllegalArgumentException("Unknown block cache type");
+    Map<CacheType,Long> sizeMap = new HashMap<>();
+    sizeMap.put(CacheType.INDEX, indexMaxSize);
+    sizeMap.put(CacheType.DATA, dataMaxSize);
+    sizeMap.put(CacheType.SUMMARY, summaryMaxSize);
+
+    Long maxSize = sizeMap.get(type);
+    if (maxSize != null) {
+      return maxSize;
     }
+    throw new IllegalArgumentException("Unknown block cache type");
   }
 
   @Override
@@ -87,30 +83,28 @@ public class BlockCacheConfiguration implements Configuration {
 
   @Override
   public String toString() {
-    return "indexMaxSize: " + indexMaxSize + "dataMaxSize: " + dataMaxSize + "summaryMaxSize: "
+    return "indexMaxSize: " + indexMaxSize + ", dataMaxSize: " + dataMaxSize + ", summaryMaxSize: "
         + summaryMaxSize + ", blockSize: " + getBlockSize();
   }
 
   @Override
   public Map<String,String> getProperties(String prefix, CacheType type) {
+    return Collections.unmodifiableMap(mergeProperties(prefix, type));
+  }
+
+  private Map<String,String> mergeProperties(String prefix, CacheType type) {
     HashMap<String,String> props = new HashMap<>();
+    addProperties(props, getFullyQualifiedPropertyPrefix(serverPrefix, prefix));
+    addProperties(props, getFullyQualifiedPropertyPrefix(serverPrefix, prefix, type));
+    return props;
+  }
 
-    // get default props first
-    String defaultPrefix = getFullyQualifiedPropertyPrefix(serverPrefix, prefix);
+  private void addProperties(Map<String,String> props, String prefix) {
     genProps.forEach((k, v) -> {
-      if (k.startsWith(defaultPrefix)) {
-        props.put(k.substring(defaultPrefix.length()), v);
+      if (k.startsWith(prefix)) {
+        props.put(k.substring(prefix.length()), v);
       }
     });
-
-    String typePrefix = getFullyQualifiedPropertyPrefix(serverPrefix, prefix, type);
-    genProps.forEach((k, v) -> {
-      if (k.startsWith(typePrefix)) {
-        props.put(k.substring(typePrefix.length()), v);
-      }
-    });
-
-    return Collections.unmodifiableMap(props);
   }
 
   public static String getFullyQualifiedPropertyPrefix(Property serverPrefix, String prefix) {
@@ -125,5 +119,4 @@ public class BlockCacheConfiguration implements Configuration {
   public static String getCachePropertyBase(Property serverPrefix) {
     return serverPrefix.getKey() + "cache.config.";
   }
-
 }
