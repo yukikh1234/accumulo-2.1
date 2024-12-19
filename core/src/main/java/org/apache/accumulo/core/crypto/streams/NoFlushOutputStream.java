@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.crypto.streams;
 
 import java.io.DataOutputStream;
@@ -34,10 +35,18 @@ public class NoFlushOutputStream extends DataOutputStream {
    */
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
+    if (b == null) {
+      throw new NullPointerException("The byte array is null");
+    }
+    if (off < 0 || len < 0 || off + len > b.length) {
+      throw new IndexOutOfBoundsException("Invalid offset or length");
+    }
     out.write(b, off, len);
   }
 
   @Override
-  public void flush() {}
+  public void flush() {
+    // Intentionally left empty to prevent flushing
+  }
 
 }
