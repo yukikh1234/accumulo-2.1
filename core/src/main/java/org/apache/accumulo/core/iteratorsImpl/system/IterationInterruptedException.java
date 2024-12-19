@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -25,7 +26,10 @@ public class IterationInterruptedException extends RuntimeException {
 
   private static final long serialVersionUID = 1L;
 
-  public IterationInterruptedException() {}
+  // Consolidated constructors to reduce code duplication
+  public IterationInterruptedException() {
+    this(null);
+  }
 
   public IterationInterruptedException(String msg) {
     super(msg);
