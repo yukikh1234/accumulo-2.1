@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,17 +33,21 @@ public class MonitorUtil {
 
   public static String getLocation(ClientContext context)
       throws KeeperException, InterruptedException {
-    return getLocation(context.getZooReader(), context);
+    return fetchLocation(context.getZooReader(), context.getZooKeeperRoot());
   }
 
   @VisibleForTesting
   static String getLocation(ZooReader zr, ClientContext context)
       throws KeeperException, InterruptedException {
+    return fetchLocation(zr, context.getZooKeeperRoot());
+  }
+
+  private static String fetchLocation(ZooReader zr, String zooKeeperRoot)
+      throws KeeperException, InterruptedException {
     try {
-      byte[] loc = zr.getData(context.getZooKeeperRoot() + Constants.ZMONITOR_HTTP_ADDR);
+      byte[] loc = zr.getData(zooKeeperRoot + Constants.ZMONITOR_HTTP_ADDR);
       return loc == null ? null : new String(loc, UTF_8);
     } catch (NoNodeException e) {
-      // If there's no node advertising the monitor, there's no monitor.
       return null;
     }
   }
