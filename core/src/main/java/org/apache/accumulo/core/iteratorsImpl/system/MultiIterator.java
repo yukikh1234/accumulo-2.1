@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.IOException;
@@ -32,15 +33,11 @@ import org.apache.accumulo.core.dataImpl.KeyExtent;
 import org.apache.accumulo.core.iterators.IteratorEnvironment;
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
 
-/**
- * An iterator capable of iterating over other iterators in sorted order.
- */
 public class MultiIterator extends HeapIterator {
 
   private final List<SortedKeyValueIterator<Key,Value>> iters;
   private final Range fence;
 
-  // deep copy with no seek/scan state
   @Override
   public MultiIterator deepCopy(IteratorEnvironment env) {
     return new MultiIterator(this, env);
@@ -50,12 +47,16 @@ public class MultiIterator extends HeapIterator {
     super(other.iters.size());
     this.iters = new ArrayList<>();
     this.fence = other.fence;
+    copyIterators(other, env);
+  }
+
+  private void copyIterators(MultiIterator other, IteratorEnvironment env) {
     for (SortedKeyValueIterator<Key,Value> iter : other.iters) {
       iters.add(iter.deepCopy(env));
     }
   }
 
-  private void init() {
+  private void initializeIterators() {
     for (SortedKeyValueIterator<Key,Value> skvi : iters) {
       addSource(skvi);
     }
@@ -66,9 +67,6 @@ public class MultiIterator extends HeapIterator {
     super(iters.size());
 
     if (seekFence != null && init) {
-      // throw this exception because multi-iterator does not seek on init, therefore the
-      // fence would not be enforced in anyway, so do not want to give the impression it
-      // will enforce this
       throw new IllegalArgumentException("Initializing not supported when seek fence set");
     }
 
@@ -76,7 +74,7 @@ public class MultiIterator extends HeapIterator {
     this.iters = iters;
 
     if (init) {
-      init();
+      initializeIterators();
     }
   }
 
@@ -97,13 +95,23 @@ public class MultiIterator extends HeapIterator {
       throws IOException {
     clear();
 
-    if (fence != null) {
-      range = fence.clip(range, true);
-      if (range == null) {
-        return;
-      }
+    Range clippedRange = applyFence(range);
+    if (clippedRange == null) {
+      return;
     }
 
+    seekIterators(clippedRange, columnFamilies, inclusive);
+  }
+
+  private Range applyFence(Range range) {
+    if (fence != null) {
+      return fence.clip(range, true);
+    }
+    return range;
+  }
+
+  private void seekIterators(Range range, Collection<ByteSequence> columnFamilies,
+      boolean inclusive) throws IOException {
     for (SortedKeyValueIterator<Key,Value> skvi : iters) {
       skvi.seek(range, columnFamilies, inclusive);
       addSource(skvi);
