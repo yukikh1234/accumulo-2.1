@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.io.IOException;
@@ -38,6 +39,10 @@ class IndexIterator implements SortedKeyValueIterator<Key,Value> {
 
   IndexIterator(Iterator<IndexEntry> indexIter) {
     this.indexIter = indexIter;
+    advance();
+  }
+
+  private void advance() {
     if (indexIter.hasNext()) {
       key = indexIter.next().getKey();
     } else {
@@ -47,7 +52,9 @@ class IndexIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public SortedKeyValueIterator<Key,Value> deepCopy(IteratorEnvironment env) {
-    throw new UnsupportedOperationException();
+    // Purpose: To create a meaningful copy of the iterator in the given environment.
+    // Since the current implementation is not supported, throwing an exception.
+    throw new UnsupportedOperationException("DeepCopy is not supported.");
   }
 
   @Override
@@ -57,7 +64,9 @@ class IndexIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public Value getTopValue() {
-    throw new UnsupportedOperationException();
+    // Purpose: To return the top value associated with the current top key.
+    // Since the current implementation does not support values, throwing an exception.
+    throw new UnsupportedOperationException("GetTopValue is not supported.");
   }
 
   @Override
@@ -68,22 +77,22 @@ class IndexIterator implements SortedKeyValueIterator<Key,Value> {
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
       IteratorEnvironment env) throws IOException {
-    throw new UnsupportedOperationException();
+    // Purpose: To initialize the iterator with a source and configuration options.
+    // Custom implementation required if needed in the future.
+    throw new UnsupportedOperationException("Init is not supported.");
   }
 
   @Override
   public void next() throws IOException {
-    if (indexIter.hasNext()) {
-      key = indexIter.next().getKey();
-    } else {
-      key = null;
-    }
+    advance();
   }
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
       throws IOException {
-    throw new UnsupportedOperationException();
+    // Purpose: To position the iterator at the first key-value pair that matches the given range.
+    // Custom implementation required if needed in the future.
+    throw new UnsupportedOperationException("Seek is not supported.");
   }
 
 }
