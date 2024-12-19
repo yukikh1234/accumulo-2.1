@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.constraints;
 
 import java.util.ArrayList;
@@ -43,12 +44,9 @@ public class DefaultKeySizeConstraint extends
 
   @Override
   public String getViolationDescription(short violationCode) {
-
-    switch (violationCode) {
-      case MAX__KEY_SIZE_EXCEEDED_VIOLATION:
-        return "Key was larger than 1MB";
+    if (violationCode == MAX__KEY_SIZE_EXCEEDED_VIOLATION) {
+      return "Key was larger than 1MB";
     }
-
     return null;
   }
 
@@ -56,25 +54,28 @@ public class DefaultKeySizeConstraint extends
 
   @Override
   public List<Short> check(Constraint.Environment env, Mutation mutation) {
-
-    // fast size check
     if (mutation.numBytes() < maxSize) {
       return NO_VIOLATIONS;
     }
+    return calculateViolations(mutation);
+  }
 
+  private List<Short> calculateViolations(Mutation mutation) {
     List<Short> violations = new ArrayList<>();
-
     for (ColumnUpdate cu : mutation.getUpdates()) {
-      int size = mutation.getRow().length;
-      size += cu.getColumnFamily().length;
-      size += cu.getColumnQualifier().length;
-      size += cu.getColumnVisibility().length;
-
+      int size = calculateSize(mutation, cu);
       if (size > maxSize) {
         violations.add(MAX__KEY_SIZE_EXCEEDED_VIOLATION);
       }
     }
-
     return violations;
+  }
+
+  private int calculateSize(Mutation mutation, ColumnUpdate cu) {
+    int size = mutation.getRow().length;
+    size += cu.getColumnFamily().length;
+    size += cu.getColumnQualifier().length;
+    size += cu.getColumnVisibility().length;
+    return size;
   }
 }
