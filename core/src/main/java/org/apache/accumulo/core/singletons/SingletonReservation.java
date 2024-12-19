@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -33,33 +34,37 @@ public class SingletonReservation implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(SingletonReservation.class);
 
-  // AtomicBoolean so cleaner doesn't need to synchronize to reliably read
+  // AtomicBoolean to track if the reservation has been closed
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  // Cleanable to manage cleanup tasks
   private final Cleanable cleanable;
 
   public SingletonReservation() {
+    // Register cleanup task with CleanerUtil
     cleanable = CleanerUtil.unclosed(this, AccumuloClient.class, closed, log, null);
   }
 
   @Override
   public void close() {
+    // Attempt to mark the reservation as closed
     if (closed.compareAndSet(false, true)) {
-      // deregister cleanable, but it won't run because it checks
-      // the value of closed first, which is now true
+      // Deregister cleanable; it won't run as 'closed' is now true
       cleanable.clean();
+      // Release the reservation from SingletonManager
       SingletonManager.releaseReservation();
     }
   }
 
   private static class NoopSingletonReservation extends SingletonReservation {
     NoopSingletonReservation() {
+      // Mark as closed immediately
       super.closed.set(true);
-      // deregister the cleaner
+      // Deregister the cleaner immediately
       super.cleanable.clean();
     }
-
   }
 
+  // Singleton instance of NoopSingletonReservation
   private static final SingletonReservation NOOP = new NoopSingletonReservation();
 
   /**
