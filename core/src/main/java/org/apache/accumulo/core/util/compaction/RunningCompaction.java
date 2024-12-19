@@ -16,10 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util.compaction;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.TreeMap;
 
 import org.apache.accumulo.core.compaction.thrift.TCompactionStatusUpdate;
 import org.apache.accumulo.core.compaction.thrift.TExternalCompaction;
@@ -30,12 +32,13 @@ public class RunningCompaction {
   private final TExternalCompactionJob job;
   private final String compactorAddress;
   private final String queueName;
-  private final Map<Long,TCompactionStatusUpdate> updates = new TreeMap<>();
+  private final Map<Long,TCompactionStatusUpdate> updates;
 
   public RunningCompaction(TExternalCompactionJob job, String compactorAddress, String queueName) {
     this.job = job;
     this.compactorAddress = compactorAddress;
     this.queueName = queueName;
+    this.updates = new HashMap<>();
   }
 
   public RunningCompaction(TExternalCompaction tEC) {
@@ -44,13 +47,13 @@ public class RunningCompaction {
 
   public Map<Long,TCompactionStatusUpdate> getUpdates() {
     synchronized (updates) {
-      return new TreeMap<>(updates);
+      return Collections.unmodifiableMap(new HashMap<>(updates));
     }
   }
 
   public void addUpdate(Long timestamp, TCompactionStatusUpdate update) {
     synchronized (updates) {
-      this.updates.put(timestamp, update);
+      updates.put(timestamp, update);
     }
   }
 
@@ -65,5 +68,4 @@ public class RunningCompaction {
   public String getQueueName() {
     return queueName;
   }
-
 }
