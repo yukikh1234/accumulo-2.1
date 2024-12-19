@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -31,6 +32,9 @@ public class OpportunisticBlockCache implements BlockCache {
 
   @Override
   public CacheEntry cacheBlock(String blockName, byte[] buf) {
+    if (buf != null && buf.length > 0) {
+      return cache.cacheBlock(blockName, buf);
+    }
     return null;
   }
 
@@ -41,7 +45,7 @@ public class OpportunisticBlockCache implements BlockCache {
 
   @Override
   public CacheEntry getBlock(String blockName, Loader loader) {
-    return cache.getBlock(blockName);
+    return cache.getBlock(blockName, loader);
   }
 
   @Override
