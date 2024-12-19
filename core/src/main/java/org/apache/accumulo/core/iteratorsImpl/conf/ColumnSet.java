@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.iteratorsImpl.conf;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -44,16 +45,13 @@ public class ColumnSet {
 
   public ColumnSet(Collection<String> objectStrings) {
     this();
-
-    for (String column : objectStrings) {
-      Pair<Text,Text> pcic = ColumnSet.decodeColumns(column);
-
+    objectStrings.stream().map(ColumnSet::decodeColumns).forEach(pcic -> {
       if (pcic.getSecond() == null) {
         add(pcic.getFirst());
       } else {
         add(pcic.getFirst(), pcic.getSecond());
       }
-    }
+    });
   }
 
   protected void add(Text colf) {
@@ -65,21 +63,12 @@ public class ColumnSet {
   }
 
   public boolean contains(Key key) {
-    // lookup column family and column qualifier
-    if (!objectsCol.isEmpty()) {
-      lookupCol.set(key);
-      if (objectsCol.contains(lookupCol)) {
-        return true;
-      }
+    lookupCol.set(key);
+    if (!objectsCol.isEmpty() && objectsCol.contains(lookupCol)) {
+      return true;
     }
-
-    // lookup just column family
-    if (!objectsCF.isEmpty()) {
-      lookupCF.set(key);
-      return objectsCF.contains(lookupCF);
-    }
-
-    return false;
+    lookupCF.set(key);
+    return !objectsCF.isEmpty() && objectsCF.contains(lookupCF);
   }
 
   public boolean isEmpty() {
@@ -88,50 +77,48 @@ public class ColumnSet {
 
   public static String encodeColumns(Text columnFamily, Text columnQualifier) {
     StringBuilder sb = new StringBuilder();
-
     encode(sb, columnFamily);
     if (columnQualifier != null) {
       sb.append(':');
       encode(sb, columnQualifier);
     }
-
     return sb.toString();
   }
 
   static void encode(StringBuilder sb, Text t) {
-    for (int i = 0; i < t.getLength(); i++) {
-      int b = (0xff & t.getBytes()[i]);
-
-      // very inefficient code
-      if ((b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
-          || b == '-') {
+    for (byte b : t.getBytes()) {
+      if (isUnreservedChar(b)) {
         sb.append((char) b);
       } else {
-        sb.append('%');
-        sb.append(String.format("%02x", b));
+        sb.append('%').append(String.format("%02x", b));
       }
     }
   }
 
+  private static boolean isUnreservedChar(int b) {
+    return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+        || b == '-';
+  }
+
   public static boolean isValidEncoding(String enc) {
     for (char c : enc.toCharArray()) {
-      boolean validChar = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-          || c == '_' || c == '-' || c == ':' || c == '%';
-      if (!validChar) {
+      if (!isValidEncodedChar(c)) {
         return false;
       }
     }
-
     return true;
+  }
+
+  private static boolean isValidEncodedChar(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+        || c == '-' || c == ':' || c == '%';
   }
 
   public static Pair<Text,Text> decodeColumns(String columns) {
     if (!isValidEncoding(columns)) {
       throw new IllegalArgumentException("Invalid encoding " + columns);
     }
-
     String[] cols = columns.split(":");
-
     if (cols.length == 1) {
       return new Pair<>(decode(cols[0]), null);
     } else if (cols.length == 2) {
@@ -143,28 +130,22 @@ public class ColumnSet {
 
   static Text decode(String s) {
     Text t = new Text();
-
     byte[] sb = s.getBytes(UTF_8);
 
-    // very inefficient code
     for (int i = 0; i < sb.length; i++) {
       if (sb[i] == '%') {
-        int x = ++i;
-        int y = ++i;
-        if (y < sb.length) {
-          byte[] hex = {sb[x], sb[y]};
-          String hs = new String(hex, UTF_8);
-          int b = Integer.parseInt(hs, 16);
-          t.append(new byte[] {(byte) b}, 0, 1);
+        if (i + 2 < sb.length) {
+          byte b =
+              (byte) Integer.parseInt(new String(new byte[] {sb[i + 1], sb[i + 2]}, UTF_8), 16);
+          t.append(new byte[] {b}, 0, 1);
+          i += 2;
         } else {
-          throw new IllegalArgumentException("Invalid characters in encoded string (" + s + ")."
-              + " Expected two characters after '%'");
+          throw new IllegalArgumentException("Invalid encoding in string: " + s);
         }
       } else {
         t.append(new byte[] {sb[i]}, 0, 1);
       }
     }
-
     return t;
   }
 }
