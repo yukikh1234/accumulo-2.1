@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,11 +28,18 @@ public class MetaBlockAlreadyExists extends IOException {
   private static final long serialVersionUID = -6797037044124244666L;
 
   /**
-   * Constructor
-   *
-   * @param s message.
+   * Default Constructor
    */
-  MetaBlockAlreadyExists(String s) {
-    super(s);
+  public MetaBlockAlreadyExists() {
+    super("Meta Block with the same name already exists.");
+  }
+
+  /**
+   * Constructor with message
+   *
+   * @param message the detail message.
+   */
+  public MetaBlockAlreadyExists(String message) {
+    super(message);
   }
 }
