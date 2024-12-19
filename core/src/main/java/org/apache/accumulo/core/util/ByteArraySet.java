@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -40,15 +41,19 @@ public class ByteArraySet extends TreeSet<byte[]> {
   }
 
   public static ByteArraySet fromStrings(Collection<String> c) {
-    List<byte[]> lst = new ArrayList<>();
-    for (String s : c) {
-      lst.add(s.getBytes(UTF_8));
-    }
-    return new ByteArraySet(lst);
+    List<byte[]> byteArrayList = convertStringsToByteArray(c);
+    return new ByteArraySet(byteArrayList);
   }
 
   public static ByteArraySet fromStrings(String... c) {
-    return ByteArraySet.fromStrings(Arrays.asList(c));
+    return fromStrings(Arrays.asList(c));
   }
 
+  private static List<byte[]> convertStringsToByteArray(Collection<String> c) {
+    List<byte[]> byteArrayList = new ArrayList<>();
+    for (String s : c) {
+      byteArrayList.add(s.getBytes(UTF_8));
+    }
+    return byteArrayList;
+  }
 }
