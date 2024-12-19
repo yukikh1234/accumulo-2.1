@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.streams;
 
 import java.io.IOException;
@@ -24,7 +7,7 @@ import java.io.InputStream;
 import org.apache.hadoop.fs.Seekable;
 
 /**
- * BoundedRangeFIleInputStream abstracts a contiguous region of a Hadoop FSDataInputStream as a
+ * BoundedRangeFileInputStream abstracts a contiguous region of a Hadoop FSDataInputStream as a
  * regular input stream. One can create multiple BoundedRangeFileInputStream on top of the same
  * FSDataInputStream and they would not interfere with each other.
  */
@@ -75,22 +58,23 @@ public class BoundedRangeFileInputStream extends InputStream {
 
   @Override
   public int read(byte[] b) throws IOException {
-    return read(b, 0, b.length);
+    return readIntoBuffer(b, 0, b.length);
   }
 
   @Override
   public int read(final byte[] b, final int off, int len) throws IOException {
-    if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
-      throw new IndexOutOfBoundsException();
-    }
+    return readIntoBuffer(b, off, len);
+  }
+
+  private int readIntoBuffer(final byte[] b, final int off, int len) throws IOException {
+    validateBufferParameters(b, off, len);
 
     final int n = (int) Math.min(Integer.MAX_VALUE, Math.min(len, (end - pos)));
     if (n == 0) {
       return -1;
     }
-    int ret = 0;
+    int ret;
     synchronized (in) {
-      // ensuring we are not closed which would be followed by someone else reusing the decompressor
       if (closed) {
         throw new IOException("Stream closed");
       }
@@ -105,10 +89,13 @@ public class BoundedRangeFileInputStream extends InputStream {
     return ret;
   }
 
+  private void validateBufferParameters(final byte[] b, final int off, int len) {
+    if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
+      throw new IndexOutOfBoundsException();
+    }
+  }
+
   @Override
-  /*
-   * We may skip beyond the end of the file.
-   */
   public long skip(long n) {
     long len = Math.min(n, end - pos);
     pos += len;
@@ -135,12 +122,8 @@ public class BoundedRangeFileInputStream extends InputStream {
 
   @Override
   public void close() {
-    // Synchronize on the FSDataInputStream to ensure we are blocked if in the read method:
-    // Once this close completes, the underlying decompression stream may be returned to
-    // the pool and subsequently used. Turns out this is a problem if currently using it to read.
     if (!closed) {
       synchronized (in) {
-        // Invalidate the state of the stream.
         closed = true;
       }
     }
