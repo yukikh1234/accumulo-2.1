@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util;
 
 import java.io.Console;
@@ -38,7 +21,6 @@ public class CreateToken implements KeywordExecutable {
   private Console reader = null;
 
   private Console getConsoleReader() {
-
     if (reader == null) {
       reader = System.console();
     }
@@ -78,42 +60,71 @@ public class CreateToken implements KeywordExecutable {
 
   @Override
   public void execute(String[] args) {
-    Opts opts = new Opts();
-    opts.parseArgs("accumulo create-token", args);
+    Opts opts = parseOptions(args);
 
-    String pass = opts.password;
-    if (pass == null && opts.securePassword != null) {
-      pass = opts.securePassword;
-    }
+    String pass = resolvePassword(opts);
 
     try {
-      String principal = opts.principal;
-      if (principal == null) {
-        principal = getConsoleReader().readLine("Username (aka principal): ");
-      }
+      String principal = resolvePrincipal(opts);
 
-      AuthenticationToken token = Class.forName(opts.tokenClassName)
-          .asSubclass(AuthenticationToken.class).getDeclaredConstructor().newInstance();
-      Properties props = new Properties();
-      for (TokenProperty tp : token.getProperties()) {
-        String input;
-        if (pass != null && tp.getKey().equals("password")) {
-          input = pass;
-        } else {
-          if (tp.getMask()) {
-            input = getConsoleReader().readLine(tp.getDescription() + ": ", '*');
-          } else {
-            input = getConsoleReader().readLine(tp.getDescription() + ": ");
-          }
-        }
-        props.put(tp.getKey(), input);
-      }
+      AuthenticationToken token = createAuthenticationToken(opts);
+
+      Properties props = gatherTokenProperties(token, pass);
+
       token.init(props);
-      System.out.println("auth.type = " + opts.tokenClassName);
-      System.out.println("auth.principal = " + principal);
-      System.out.println("auth.token = " + ClientProperty.encodeToken(token));
+
+      printTokenDetails(opts, principal, token);
+
     } catch (ReflectiveOperationException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private Opts parseOptions(String[] args) {
+    Opts opts = new Opts();
+    opts.parseArgs("accumulo create-token", args);
+    return opts;
+  }
+
+  private String resolvePassword(Opts opts) {
+    return (opts.password != null) ? opts.password : opts.securePassword;
+  }
+
+  private String resolvePrincipal(Opts opts) {
+    if (opts.principal == null) {
+      return getConsoleReader().readLine("Username (aka principal): ");
+    }
+    return opts.principal;
+  }
+
+  private AuthenticationToken createAuthenticationToken(Opts opts)
+      throws ReflectiveOperationException {
+    return Class.forName(opts.tokenClassName).asSubclass(AuthenticationToken.class)
+        .getDeclaredConstructor().newInstance();
+  }
+
+  private Properties gatherTokenProperties(AuthenticationToken token, String pass) {
+    Properties props = new Properties();
+    for (TokenProperty tp : token.getProperties()) {
+      String input = getInputForTokenProperty(tp, pass);
+      props.put(tp.getKey(), input);
+    }
+    return props;
+  }
+
+  private String getInputForTokenProperty(TokenProperty tp, String pass) {
+    if (pass != null && tp.getKey().equals("password")) {
+      return pass;
+    }
+    if (tp.getMask()) {
+      return getConsoleReader().readLine(tp.getDescription() + ": ", '*');
+    }
+    return getConsoleReader().readLine(tp.getDescription() + ": ");
+  }
+
+  private void printTokenDetails(Opts opts, String principal, AuthenticationToken token) {
+    System.out.println("auth.type = " + opts.tokenClassName);
+    System.out.println("auth.principal = " + principal);
+    System.out.println("auth.token = " + ClientProperty.encodeToken(token));
   }
 }
