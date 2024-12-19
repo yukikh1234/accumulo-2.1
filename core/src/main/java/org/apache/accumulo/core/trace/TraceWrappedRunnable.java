@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -34,6 +35,12 @@ class TraceWrappedRunnable implements Runnable {
   private final Context context;
   private final Runnable unwrapped;
 
+  /**
+   * Recursively unwraps the given Runnable to its original form.
+   *
+   * @param r the Runnable to unwrap
+   * @return the unwrapped Runnable
+   */
   static Runnable unwrapFully(Runnable r) {
     while (r instanceof TraceWrappedRunnable) {
       r = ((TraceWrappedRunnable) r).unwrapped;
@@ -58,15 +65,15 @@ class TraceWrappedRunnable implements Runnable {
     if (this == obj) {
       return true;
     }
-    if (obj instanceof TraceWrappedRunnable) {
-      return Objects.equals(unwrapped, ((TraceWrappedRunnable) obj).unwrapped);
+    if (!(obj instanceof TraceWrappedRunnable)) {
+      return false;
     }
-    return false;
+    TraceWrappedRunnable other = (TraceWrappedRunnable) obj;
+    return Objects.equals(unwrapped, other.unwrapped);
   }
 
   @Override
   public int hashCode() {
-    return unwrapped.hashCode();
+    return Objects.hash(unwrapped);
   }
-
 }
