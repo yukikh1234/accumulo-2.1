@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -38,10 +39,10 @@ import java.util.function.Supplier;
  */
 public abstract class DateFormatSupplier extends ThreadLocal<DateFormat>
     implements Supplier<DateFormat> {
-  private TimeZone timeZone;
+  private final TimeZone timeZone;
 
   public DateFormatSupplier() {
-    timeZone = TimeZone.getDefault();
+    this(TimeZone.getDefault());
   }
 
   public DateFormatSupplier(TimeZone timeZone) {
@@ -50,10 +51,6 @@ public abstract class DateFormatSupplier extends ThreadLocal<DateFormat>
 
   public TimeZone getTimeZone() {
     return timeZone;
-  }
-
-  public void setTimeZone(TimeZone timeZone) {
-    this.timeZone = timeZone;
   }
 
   /** Always sets the TimeZone, which is a fast operation */
@@ -73,7 +70,9 @@ public abstract class DateFormatSupplier extends ThreadLocal<DateFormat>
     return new DateFormatSupplier() {
       @Override
       protected DateFormat initialValue() {
-        return new FormatterConfig.DefaultDateFormat();
+        DateFormat df = new FormatterConfig.DefaultDateFormat();
+        df.setTimeZone(getTimeZone());
+        return df;
       }
     };
   }
@@ -83,7 +82,9 @@ public abstract class DateFormatSupplier extends ThreadLocal<DateFormat>
     return new DateFormatSupplier() {
       @Override
       protected SimpleDateFormat initialValue() {
-        return new SimpleDateFormat(dateFormat);
+        SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+        sdf.setTimeZone(getTimeZone());
+        return sdf;
       }
     };
   }
@@ -94,7 +95,9 @@ public abstract class DateFormatSupplier extends ThreadLocal<DateFormat>
     return new DateFormatSupplier(timeZone) {
       @Override
       protected SimpleDateFormat initialValue() {
-        return new SimpleDateFormat(dateFormat);
+        SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+        sdf.setTimeZone(getTimeZone());
+        return sdf;
       }
     };
   }
