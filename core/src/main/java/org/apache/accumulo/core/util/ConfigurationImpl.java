@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,9 +33,6 @@ import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.conf.PropertyType;
 import org.apache.accumulo.core.spi.common.ServiceEnvironment.Configuration;
 
-/**
- * The implementation class used for providing SPI configuration without exposing internal types.
- */
 public class ConfigurationImpl implements Configuration {
 
   private final AccumuloConfiguration acfg;
@@ -52,25 +50,20 @@ public class ConfigurationImpl implements Configuration {
   @Override
   public boolean isSet(String key) {
     Property prop = Property.getPropertyByKey(key);
-    if (prop != null) {
-      return acfg.isPropertySet(prop);
-    } else {
-      return acfg.get(key) != null;
-    }
+    return prop != null ? acfg.isPropertySet(prop) : acfg.get(key) != null;
   }
 
   @Override
   public String get(String key) {
-    // Get prop to check if sensitive, also looking up by prop may be more efficient.
     Property prop = Property.getPropertyByKey(key);
+    return getProperty(prop, key);
+  }
+
+  private String getProperty(Property prop, String key) {
     if (prop != null) {
-      if (prop.isSensitive()) {
-        return null;
-      }
-      return acfg.get(prop);
-    } else {
-      return acfg.get(key);
+      return prop.isSensitive() ? null : acfg.get(prop);
     }
+    return acfg.get(key);
   }
 
   @Override
@@ -78,11 +71,10 @@ public class ConfigurationImpl implements Configuration {
     Property propertyPrefix = Property.getPropertyByKey(prefix);
     if (propertyPrefix != null && propertyPrefix.getType() == PropertyType.PREFIX) {
       return acfg.getAllPropertiesWithPrefix(propertyPrefix);
-    } else {
-      return StreamSupport.stream(acfg.spliterator(), false)
-          .filter(prop -> prop.getKey().startsWith(prefix))
-          .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
     }
+    return StreamSupport.stream(acfg.spliterator(), false)
+        .filter(prop -> prop.getKey().startsWith(prefix))
+        .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
   }
 
   @Override
