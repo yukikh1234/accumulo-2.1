@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import java.util.AbstractMap.SimpleImmutableEntry;
@@ -26,23 +27,21 @@ public class Pair<A,B> {
   private final A first;
   private final B second;
 
-  public Pair(A f, B s) {
-    this.first = f;
-    this.second = s;
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(first) + Objects.hashCode(second);
+  public Pair(A first, B second) {
+    this.first = first;
+    this.second = second;
   }
 
   @Override
   public boolean equals(Object o) {
-    if (o instanceof Pair<?,?>) {
-      Pair<?,?> other = (Pair<?,?>) o;
-      return Objects.equals(first, other.first) && Objects.equals(second, other.second);
+    if (this == o) {
+      return true;
     }
-    return false;
+    if (!(o instanceof Pair<?,?>)) {
+      return false;
+    }
+    Pair<?,?> other = (Pair<?,?>) o;
+    return Objects.equals(first, other.first) && Objects.equals(second, other.second);
   }
 
   public A getFirst() {
@@ -73,5 +72,4 @@ public class Pair<A,B> {
   public static <K2,V2,K1 extends K2,V1 extends V2> Pair<K2,V2> fromEntry(Entry<K1,V1> entry) {
     return new Pair<>(entry.getKey(), entry.getValue());
   }
-
 }
