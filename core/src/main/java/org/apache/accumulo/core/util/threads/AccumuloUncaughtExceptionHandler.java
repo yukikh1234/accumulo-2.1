@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,50 +33,46 @@ class AccumuloUncaughtExceptionHandler implements UncaughtExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(AccumuloUncaughtExceptionHandler.class);
 
-  private static boolean isError(Throwable t, int depth) {
+  private static boolean isError(Throwable t) {
+    return checkError(t, 0);
+  }
 
+  private static boolean checkError(Throwable t, int depth) {
     if (depth > 32) {
-      // This is a peculiar exception. No error has been found, but recursing too deep may cause a
-      // stack overflow so going to stop. Err on the side of caution and assume there could be an
-      // error since not everything was checked.
+      // Recursion too deep, assume error to prevent stack overflow.
       return true;
     }
-
     while (t != null) {
       if (t instanceof Error) {
         return true;
       }
-
       for (Throwable suppressed : t.getSuppressed()) {
-        if (isError(suppressed, depth + 1)) {
+        if (checkError(suppressed, depth + 1)) {
           return true;
         }
       }
-
       t = t.getCause();
     }
-
     return false;
-  }
-
-  static boolean isError(Throwable t) {
-    return isError(t, 0);
   }
 
   @Override
   public void uncaughtException(Thread t, Throwable e) {
     if (isError(e)) {
-      try {
-        e.printStackTrace();
-        System.err.println("Error thrown in thread: " + t + ", halting VM.");
-      } catch (Throwable e1) {
-        // If e == OutOfMemoryError, then it's probably that another Error might be
-        // thrown when trying to print to System.err.
-      } finally {
-        Runtime.getRuntime().halt(-1);
-      }
+      handleCriticalError(t, e);
     } else {
       LOG.error("Caught an Exception in {}. Thread is dead.", t, e);
+    }
+  }
+
+  private void handleCriticalError(Thread t, Throwable e) {
+    try {
+      e.printStackTrace();
+      System.err.println("Error thrown in thread: " + t + ", halting VM.");
+    } catch (Throwable e1) {
+      // Handle potential errors in error logging, such as OutOfMemoryError.
+    } finally {
+      Runtime.getRuntime().halt(-1);
     }
   }
 }
