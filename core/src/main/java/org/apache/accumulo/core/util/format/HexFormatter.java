@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util.format;
 
 import java.util.Iterator;
@@ -27,51 +10,69 @@ import org.apache.accumulo.core.util.interpret.ScanInterpreter;
 import org.apache.hadoop.io.Text;
 
 /**
- * A simple formatter that print the row, column family, column qualifier, and value as hex
+ * A simple formatter that prints the row, column family, column qualifier, and value as hex
  */
 @Deprecated(since = "2.1.0")
 public class HexFormatter implements Formatter, ScanInterpreter {
 
-  private char[] chars =
+  private static final char[] HEX_CHARS =
       {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+
   private Iterator<Entry<Key,Value>> iter;
   private FormatterConfig config;
 
+  /**
+   * Converts a byte array to a hex string, inserting dashes every two characters.
+   *
+   * @param sb the StringBuilder to append to
+   * @param bin the byte array to convert
+   */
   private void toHex(StringBuilder sb, byte[] bin) {
-
     for (int i = 0; i < bin.length; i++) {
       if (i > 0 && i % 2 == 0) {
         sb.append('-');
       }
-      sb.append(chars[0x0f & (bin[i] >>> 4)]);
-      sb.append(chars[0x0f & bin[i]]);
+      sb.append(HEX_CHARS[(bin[i] >>> 4) & 0x0F]);
+      sb.append(HEX_CHARS[bin[i] & 0x0F]);
     }
   }
 
+  /**
+   * Converts a character to its corresponding hex value.
+   *
+   * @param b the character to convert
+   * @return the hex value
+   * @throws IllegalArgumentException if the character is not a valid hex character
+   */
   private int fromChar(char b) {
     if (b >= '0' && b <= '9') {
-      return (b - '0');
+      return b - '0';
     } else if (b >= 'a' && b <= 'f') {
-      return (b - 'a' + 10);
+      return b - 'a' + 10;
     }
-
     throw new IllegalArgumentException("Bad char " + b);
   }
 
+  /**
+   * Converts a hex string to a byte array.
+   *
+   * @param hex the hex string
+   * @return the resulting byte array
+   * @throws IllegalArgumentException if the hex string is invalid
+   */
   private byte[] toBinary(String hex) {
+    if (hex == null || hex.isEmpty()) {
+      throw new IllegalArgumentException("Invalid hex string");
+    }
     hex = hex.replace("-", "");
-
     byte[] bin = new byte[(hex.length() / 2) + (hex.length() % 2)];
-
     int j = 0;
     for (int i = 0; i < bin.length; i++) {
       bin[i] = (byte) (fromChar(hex.charAt(j++)) << 4);
-      if (j >= hex.length()) {
-        break;
+      if (j < hex.length()) {
+        bin[i] |= (byte) fromChar(hex.charAt(j++));
       }
-      bin[i] |= (byte) fromChar(hex.charAt(j++));
     }
-
     return bin;
   }
 
@@ -83,24 +84,41 @@ public class HexFormatter implements Formatter, ScanInterpreter {
   @Override
   public String next() {
     Entry<Key,Value> entry = iter.next();
-
     StringBuilder sb = new StringBuilder();
+    formatKey(sb, entry.getKey());
+    formatValue(sb, entry.getValue());
+    return sb.toString();
+  }
 
-    toHex(sb, entry.getKey().getRowData().toArray());
+  /**
+   * Formats the key components into a hex string.
+   *
+   * @param sb the StringBuilder to append to
+   * @param key the Key object
+   */
+  private void formatKey(StringBuilder sb, Key key) {
+    toHex(sb, key.getRowData().toArray());
     sb.append("  ");
-    toHex(sb, entry.getKey().getColumnFamilyData().toArray());
+    toHex(sb, key.getColumnFamilyData().toArray());
     sb.append("  ");
-    toHex(sb, entry.getKey().getColumnQualifierData().toArray());
+    toHex(sb, key.getColumnQualifierData().toArray());
     sb.append(" [");
-    sb.append(entry.getKey().getColumnVisibilityData());
+    sb.append(key.getColumnVisibilityData());
     sb.append("] ");
     if (config.willPrintTimestamps()) {
-      sb.append(entry.getKey().getTimestamp());
+      sb.append(key.getTimestamp());
       sb.append("  ");
     }
-    toHex(sb, entry.getValue().get());
+  }
 
-    return sb.toString();
+  /**
+   * Formats the value into a hex string.
+   *
+   * @param sb the StringBuilder to append to
+   * @param value the Value object
+   */
+  private void formatValue(StringBuilder sb, Value value) {
+    toHex(sb, value.get());
   }
 
   @Override
