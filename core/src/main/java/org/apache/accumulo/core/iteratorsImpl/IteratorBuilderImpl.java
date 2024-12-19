@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -27,12 +28,12 @@ import org.apache.accumulo.core.iterators.IteratorEnvironment;
 public class IteratorBuilderImpl
     implements IteratorBuilder.IteratorBuilderEnv, IteratorBuilder.IteratorBuilderOptions {
 
-  Collection<IterInfo> iters;
-  Map<String,Map<String,String>> iterOpts;
-  IteratorEnvironment iteratorEnvironment;
-  boolean useAccumuloClassLoader = false;
-  String context = null;
-  boolean useClassCache = false;
+  private final Collection<IterInfo> iters;
+  private Map<String,Map<String,String>> iterOpts;
+  private IteratorEnvironment iteratorEnvironment;
+  private boolean useAccumuloClassLoader;
+  private String context;
+  private boolean useClassCache;
 
   public IteratorBuilderImpl(Collection<IterInfo> iters) {
     this.iters = iters;
@@ -64,7 +65,7 @@ public class IteratorBuilderImpl
 
   @Override
   public IteratorBuilder build() {
-    var ib = new IteratorBuilder();
+    IteratorBuilder ib = new IteratorBuilder();
     ib.iters = this.iters;
     ib.iterOpts = this.iterOpts;
     ib.iteratorEnvironment = this.iteratorEnvironment;
