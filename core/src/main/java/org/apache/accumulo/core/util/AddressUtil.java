@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -18,7 +19,6 @@
  */
 package org.apache.accumulo.core.util;
 
-import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.security.Security;
 
@@ -29,6 +29,8 @@ public class AddressUtil {
 
   private static final Logger log = LoggerFactory.getLogger(AddressUtil.class);
 
+  private static final int DEFAULT_NEGATIVE_TTL = 10;
+
   public static HostAndPort parseAddress(String address, boolean ignoreMissingPort)
       throws NumberFormatException {
     address = address.replace('+', ':');
@@ -37,7 +39,6 @@ public class AddressUtil {
       throw new IllegalArgumentException(
           "Address was expected to contain port. address=" + address);
     }
-
     return hap;
   }
 
@@ -45,29 +46,26 @@ public class AddressUtil {
     return parseAddress(address, true).withDefaultPort(defaultPort);
   }
 
-  /**
-   * Fetch the security value that determines how long DNS failures are cached. Looks up the
-   * security property 'networkaddress.cache.negative.ttl'. Should that fail returns the default
-   * value used in the Oracle JVM 1.4+, which is 10 seconds.
-   *
-   * @param originalException the host lookup that is the source of needing this lookup. maybe be
-   *        null.
-   * @return positive integer number of seconds
-   * @see InetAddress
-   * @throws IllegalArgumentException if dns failures are cached forever
-   */
   public static int getAddressCacheNegativeTtl(UnknownHostException originalException) {
-    int negativeTtl = 10;
+    int negativeTtl = getNegativeTtlFromSecurityProperty();
+    validateNegativeTtl(negativeTtl, originalException);
+    return negativeTtl < 0 ? DEFAULT_NEGATIVE_TTL : negativeTtl;
+  }
+
+  private static int getNegativeTtlFromSecurityProperty() {
     try {
-      negativeTtl = Integer.parseInt(Security.getProperty("networkaddress.cache.negative.ttl"));
-    } catch (NumberFormatException exception) {
-      log.warn("Failed to get JVM negative DNS response cache TTL due to format problem "
-          + "(e.g. this JVM might not have the property). "
-          + "Falling back to default based on Oracle JVM 1.4+ (10s)", exception);
-    } catch (SecurityException exception) {
+      return Integer.parseInt(Security.getProperty("networkaddress.cache.negative.ttl"));
+    } catch (NumberFormatException e) {
+      log.warn("Failed to get JVM negative DNS response cache TTL due to format problem. "
+          + "Falling back to default based on Oracle JVM 1.4+ (10s)", e);
+    } catch (SecurityException e) {
       log.warn("Failed to get JVM negative DNS response cache TTL due to security manager. "
-          + "Falling back to default based on Oracle JVM 1.4+ (10s)", exception);
+          + "Falling back to default based on Oracle JVM 1.4+ (10s)", e);
     }
+    return DEFAULT_NEGATIVE_TTL;
+  }
+
+  private static void validateNegativeTtl(int negativeTtl, UnknownHostException originalException) {
     if (negativeTtl == -1) {
       log.error(
           "JVM negative DNS response cache TTL is set to 'forever' and host lookup failed. "
@@ -78,9 +76,6 @@ public class AddressUtil {
     } else if (negativeTtl < 0) {
       log.warn("JVM specified negative DNS response cache TTL was negative (and not 'forever'). "
           + "Falling back to default based on Oracle JVM 1.4+ (10s)");
-      negativeTtl = 10;
     }
-    return negativeTtl;
   }
-
 }
