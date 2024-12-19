@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.IOException;
@@ -39,10 +22,15 @@ public class SynchronizedIterator<K extends WritableComparable<?>,V extends Writ
 
   private final SortedKeyValueIterator<K,V> source;
 
+  public SynchronizedIterator(SortedKeyValueIterator<K,V> source) {
+    this.source = source;
+  }
+
   @Override
   public synchronized void init(SortedKeyValueIterator<K,V> source, Map<String,String> options,
       IteratorEnvironment env) throws IOException {
-    throw new UnsupportedOperationException();
+    // Consider implementing the method or provide a meaningful message
+    throw new UnsupportedOperationException("Init method is not implemented.");
   }
 
   @Override
@@ -74,9 +62,5 @@ public class SynchronizedIterator<K extends WritableComparable<?>,V extends Writ
   @Override
   public synchronized SortedKeyValueIterator<K,V> deepCopy(IteratorEnvironment env) {
     return new SynchronizedIterator<>(source.deepCopy(env));
-  }
-
-  public SynchronizedIterator(SortedKeyValueIterator<K,V> source) {
-    this.source = source;
   }
 }
