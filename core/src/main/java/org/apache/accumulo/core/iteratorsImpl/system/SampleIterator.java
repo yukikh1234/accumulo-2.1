@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,7 +29,11 @@ import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
 
 public class SampleIterator extends Filter {
 
-  private Sampler sampler = new RowSampler();
+  private final Sampler sampler;
+
+  public SampleIterator(SortedKeyValueIterator<Key,Value> iter) {
+    this(iter, new RowSampler());
+  }
 
   public SampleIterator(SortedKeyValueIterator<Key,Value> iter, Sampler sampler) {
     setSource(iter);
