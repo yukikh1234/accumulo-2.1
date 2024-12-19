@@ -16,23 +16,20 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 public final class ComparablePair<A extends Comparable<A>,B extends Comparable<B>> extends Pair<A,B>
     implements Comparable<ComparablePair<A,B>> {
 
-  public ComparablePair(A f, B s) {
-    super(f, s);
+  public ComparablePair(A first, B second) {
+    super(first, second);
   }
 
   @Override
-  public int compareTo(ComparablePair<A,B> abPair) {
-    int cmp = getFirst().compareTo(abPair.getFirst());
-    if (cmp == 0) {
-      cmp = getSecond().compareTo(abPair.getSecond());
-    }
-
-    return cmp;
+  public int compareTo(ComparablePair<A,B> otherPair) {
+    int comparisonResult = getFirst().compareTo(otherPair.getFirst());
+    return (comparisonResult != 0) ? comparisonResult
+        : getSecond().compareTo(otherPair.getSecond());
   }
-
 }
