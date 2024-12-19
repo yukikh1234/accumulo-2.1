@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.blockfile.cache.lru;
 
 import org.apache.accumulo.core.spi.cache.BlockCache;
@@ -30,6 +31,10 @@ public class LruBlockCacheManager extends BlockCacheManager {
 
   @Override
   protected BlockCache createCache(Configuration conf, CacheType type) {
+    return initializeCache(conf, type);
+  }
+
+  private BlockCache initializeCache(Configuration conf, CacheType type) {
     LruBlockCacheConfiguration cc = new LruBlockCacheConfiguration(conf, type);
     LOG.info("Creating {} cache with configuration {}", type, cc);
     return new LruBlockCache(cc);
@@ -37,13 +42,20 @@ public class LruBlockCacheManager extends BlockCacheManager {
 
   @Override
   public void stop() {
+    shutdownCaches();
+    super.stop();
+  }
+
+  private void shutdownCaches() {
     for (CacheType type : CacheType.values()) {
-      LruBlockCache cache = ((LruBlockCache) this.getBlockCache(type));
+      LruBlockCache cache = getCache(type);
       if (cache != null) {
         cache.shutdown();
       }
     }
-    super.stop();
   }
 
+  private LruBlockCache getCache(CacheType type) {
+    return (LruBlockCache) this.getBlockCache(type);
+  }
 }
