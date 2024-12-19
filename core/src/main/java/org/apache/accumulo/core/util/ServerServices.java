@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -33,16 +34,19 @@ public class ServerServices implements Comparable<ServerServices> {
 
   public ServerServices(String services) {
     this.services = new EnumMap<>(Service.class);
+    parseServices(services);
+  }
 
+  public ServerServices(String address, Service service) {
+    this(service.name() + SEPARATOR_CHAR + address);
+  }
+
+  private void parseServices(String services) {
     String[] addresses = services.split(SERVICE_SEPARATOR);
     for (String address : addresses) {
       String[] sa = address.split(SEPARATOR_CHAR, 2);
       this.services.put(Service.valueOf(sa[0]), sa[1]);
     }
-  }
-
-  public ServerServices(String address, Service service) {
-    this(service.name() + SEPARATOR_CHAR + address);
   }
 
   public String getAddressString(Service service) {
@@ -57,18 +61,22 @@ public class ServerServices implements Comparable<ServerServices> {
   @Override
   public String toString() {
     if (stringForm == null) {
-      StringBuilder sb = new StringBuilder();
-      String prefix = "";
-      for (Service service : new Service[] {Service.TSERV_CLIENT, Service.GC_CLIENT}) {
-        if (services.containsKey(service)) {
-          sb.append(prefix).append(service.name()).append(SEPARATOR_CHAR)
-              .append(services.get(service));
-          prefix = SERVICE_SEPARATOR;
-        }
-      }
-      stringForm = sb.toString();
+      stringForm = buildStringForm();
     }
     return stringForm;
+  }
+
+  private String buildStringForm() {
+    StringBuilder sb = new StringBuilder();
+    String prefix = "";
+    for (Service service : Service.values()) {
+      if (services.containsKey(service)) {
+        sb.append(prefix).append(service.name()).append(SEPARATOR_CHAR)
+            .append(services.get(service));
+        prefix = SERVICE_SEPARATOR;
+      }
+    }
+    return sb.toString();
   }
 
   @Override
