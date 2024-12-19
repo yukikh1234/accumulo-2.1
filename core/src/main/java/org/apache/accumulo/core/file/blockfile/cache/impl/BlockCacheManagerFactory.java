@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,36 +30,23 @@ public class BlockCacheManagerFactory {
 
   private static final Logger LOG = LoggerFactory.getLogger(BlockCacheManager.class);
 
-  /**
-   * Get the BlockCacheFactory specified by the property 'tserver.cache.factory.class' using the
-   * AccumuloVFSClassLoader
-   *
-   * @param conf accumulo configuration
-   * @return block cache manager instance
-   * @throws Exception error loading block cache manager implementation class
-   */
-  public static synchronized BlockCacheManager getInstance(AccumuloConfiguration conf)
-      throws Exception {
+  private static synchronized BlockCacheManager createInstance(AccumuloConfiguration conf,
+      boolean useVFS) throws Exception {
     String impl = conf.get(Property.TSERV_CACHE_MANAGER_IMPL);
     Class<? extends BlockCacheManager> clazz =
-        ClassLoaderUtil.loadClass(impl, BlockCacheManager.class);
+        useVFS ? ClassLoaderUtil.loadClass(impl, BlockCacheManager.class)
+            : Class.forName(impl).asSubclass(BlockCacheManager.class);
     LOG.info("Created new block cache manager of type: {}", clazz.getSimpleName());
     return clazz.getDeclaredConstructor().newInstance();
   }
 
-  /**
-   * Get the BlockCacheFactory specified by the property 'tserver.cache.factory.class'
-   *
-   * @param conf accumulo configuration
-   * @return block cache manager instance
-   * @throws Exception error loading block cache manager implementation class
-   */
+  public static synchronized BlockCacheManager getInstance(AccumuloConfiguration conf)
+      throws Exception {
+    return createInstance(conf, true);
+  }
+
   public static synchronized BlockCacheManager getClientInstance(AccumuloConfiguration conf)
       throws Exception {
-    String impl = conf.get(Property.TSERV_CACHE_MANAGER_IMPL);
-    Class<? extends BlockCacheManager> clazz =
-        Class.forName(impl).asSubclass(BlockCacheManager.class);
-    LOG.info("Created new block cache factory of type: {}", clazz.getSimpleName());
-    return clazz.getDeclaredConstructor().newInstance();
+    return createInstance(conf, false);
   }
 }
