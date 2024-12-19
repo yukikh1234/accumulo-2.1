@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,7 +37,9 @@ public class EmptyIterator implements InterruptibleIterator {
 
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
-      IteratorEnvironment env) throws IOException {}
+      IteratorEnvironment env) throws IOException {
+    // Not expected to be called since this is an empty iterator
+  }
 
   @Override
   public boolean hasTop() {
@@ -45,24 +48,25 @@ public class EmptyIterator implements InterruptibleIterator {
 
   @Override
   public void next() throws IOException {
-    // nothing should call this since hasTop always returns false
-    throw new UnsupportedOperationException();
+    // Not expected to be called since hasTop always returns false
   }
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
-      throws IOException {}
+      throws IOException {
+    // Not expected to be called since this is an empty iterator
+  }
 
   @Override
   public Key getTopKey() {
-    // nothing should call this since hasTop always returns false
-    throw new UnsupportedOperationException();
+    // Not expected to be called since hasTop always returns false
+    return null;
   }
 
   @Override
   public Value getTopValue() {
-    // nothing should call this since hasTop always returns false
-    throw new UnsupportedOperationException();
+    // Not expected to be called since hasTop always returns false
+    return null;
   }
 
   @Override
@@ -71,5 +75,7 @@ public class EmptyIterator implements InterruptibleIterator {
   }
 
   @Override
-  public void setInterruptFlag(AtomicBoolean flag) {}
+  public void setInterruptFlag(AtomicBoolean flag) {
+    // Not expected to be called since this is an empty iterator
+  }
 }
