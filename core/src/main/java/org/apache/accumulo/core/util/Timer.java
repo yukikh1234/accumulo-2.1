@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,7 +30,7 @@ public final class Timer {
   private long startNanos;
 
   private Timer() {
-    this.startNanos = System.nanoTime();
+    restart();
   }
 
   /**
@@ -90,8 +91,6 @@ public final class Timer {
 
   private static long toNanos(Duration duration) {
     try {
-      // This can overflow when very large, such as when the
-      // duration is created using Long.MAX_VALUE millis
       return duration.toNanos();
     } catch (ArithmeticException e) {
       return Long.MAX_VALUE;
