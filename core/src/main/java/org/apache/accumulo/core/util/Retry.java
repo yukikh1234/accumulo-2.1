@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -50,13 +51,6 @@ public class Retry {
   private double currentBackOffFactor;
   private boolean doTimeJitter = true;
 
-  /**
-   * @param maxRetries Maximum times to retry or MAX_RETRY_DISABLED if no maximum
-   * @param startWait The amount of time (ms) to wait for the initial retry
-   * @param maxWait The maximum wait (ms)
-   * @param waitIncrement The amount of time (ms) to increment next wait time by
-   * @param logInterval The amount of time (ms) between logging retries
-   */
   private Retry(long maxRetries, long startWait, long waitIncrement, long maxWait, long logInterval,
       double backOffFactor) {
     this.maxRetries = maxRetries;
@@ -70,72 +64,60 @@ public class Retry {
     this.lastRetryLog = -1;
     this.backOffFactor = backOffFactor;
     this.currentBackOffFactor = this.backOffFactor;
-
   }
 
-  // Visible for testing
   @VisibleForTesting
   public void setBackOffFactor(double baskOffFactor) {
     this.backOffFactor = baskOffFactor;
     this.currentBackOffFactor = this.backOffFactor;
   }
 
-  // Visible for testing
   @VisibleForTesting
   public double getWaitFactor() {
     return backOffFactor;
   }
 
-  // Visible for testing
   @VisibleForTesting
   long getMaxRetries() {
     return maxRetries;
   }
 
-  // Visible for testing
   @VisibleForTesting
   long getCurrentWait() {
     return currentWait;
   }
 
-  // Visible for testing
   @VisibleForTesting
   long getWaitIncrement() {
     return waitIncrement;
   }
 
-  // Visible for testing
   @VisibleForTesting
   long getMaxWait() {
     return maxWait;
   }
 
-  // Visible for testing
   @VisibleForTesting
   void setMaxRetries(long maxRetries) {
     this.maxRetries = maxRetries;
   }
 
-  // Visible for testing
   @VisibleForTesting
   void setStartWait(long startWait) {
     this.currentWait = startWait;
     this.initialWait = startWait;
   }
 
-  // Visible for testing
   @VisibleForTesting
   void setWaitIncrement(long waitIncrement) {
     this.waitIncrement = waitIncrement;
   }
 
-  // Visible for testing
   @VisibleForTesting
   void setMaxWait(long maxWait) {
     this.maxWait = maxWait;
   }
 
-  // Visible for testing
   @VisibleForTesting
   void setDoTimeJitter(boolean jitter) {
     doTimeJitter = jitter;
@@ -170,23 +152,27 @@ public class Retry {
 
   public void waitForNextAttempt(Logger log, String operationDescription)
       throws InterruptedException {
+    updateWaitFactor();
+    log.debug("Sleeping for {}ms before retrying operation : {} ", currentWait,
+        operationDescription);
+    sleep(currentWait);
+    updateCurrentWait();
+  }
 
+  private void updateWaitFactor() {
     double waitFactor = (1 + (random.nextDouble() - 0.5) / 10.0) * currentBackOffFactor;
     if (!doTimeJitter) {
       waitFactor = currentBackOffFactor;
     }
-    currentBackOffFactor = currentBackOffFactor * backOffFactor;
+    currentBackOffFactor *= backOffFactor;
+  }
 
-    log.debug("Sleeping for {}ms before retrying operation : {} ", currentWait,
-        operationDescription);
-
-    sleep(currentWait);
-
+  private void updateCurrentWait() {
     if (backOffFactor == 1) {
       currentWait = Math.min(maxWait, currentWait + waitIncrement);
     } else if (backOffFactor > 1.0) {
       if (currentWait < maxWait) {
-        waitIncrement = (long) Math.ceil(waitFactor * this.initialWait);
+        waitIncrement = (long) Math.ceil(currentBackOffFactor * this.initialWait);
         currentWait = Math.min(maxWait, initialWait + waitIncrement);
       }
     }
@@ -197,43 +183,32 @@ public class Retry {
   }
 
   public void logRetry(Logger log, String message, Throwable t) {
-    // log the first time as debug, and then after every logInterval as a warning
+    logRetryInternal(log, message, t);
+  }
+
+  public void logRetry(Logger log, String message) {
+    logRetryInternal(log, message, null);
+  }
+
+  private void logRetryInternal(Logger log, String message, Throwable t) {
     long now = System.nanoTime();
     if (hasNeverLogged) {
-      if (log.isDebugEnabled()) {
-        log.debug(getMessage(message, t));
-      }
-      hasNeverLogged = false;
-      lastRetryLog = now;
+      logFirstRetry(log, message, t, now);
     } else if ((now - lastRetryLog) > logIntervalNanoSec) {
       log.warn(getMessage(message), t);
       lastRetryLog = now;
       hasLoggedWarn = true;
     } else {
-      if (log.isTraceEnabled()) {
-        log.trace(getMessage(message, t));
-      }
+      log.trace(getMessage(message), t);
     }
   }
 
-  public void logRetry(Logger log, String message) {
-    // log the first time as debug, and then after every logInterval as a warning
-    long now = System.nanoTime();
-    if (hasNeverLogged) {
-      if (log.isDebugEnabled()) {
-        log.debug(getMessage(message));
-      }
-      hasNeverLogged = false;
-      lastRetryLog = now;
-    } else if ((now - lastRetryLog) > logIntervalNanoSec) {
-      log.warn(getMessage(message));
-      lastRetryLog = now;
-      hasLoggedWarn = true;
-    } else {
-      if (log.isTraceEnabled()) {
-        log.trace(getMessage(message));
-      }
+  private void logFirstRetry(Logger log, String message, Throwable t, long now) {
+    if (log.isDebugEnabled()) {
+      log.debug(getMessage(message, t));
     }
+    hasNeverLogged = false;
+    lastRetryLog = now;
   }
 
   private String getMessage(String message) {
@@ -259,87 +234,38 @@ public class Retry {
   }
 
   public interface NeedsRetries {
-    /**
-     * @return this builder with the maximum number of retries set to unlimited
-     */
     NeedsRetryDelay infiniteRetries();
 
-    /**
-     * @param max the maximum number of retries to set
-     * @return this builder with the maximum number of retries set to the provided value
-     */
     NeedsRetryDelay maxRetries(long max);
   }
 
   public interface NeedsRetryDelay {
-    /**
-     * @param duration the amount of time to wait before the first retry; input is converted to
-     *        milliseconds, rounded down to the nearest
-     * @return this builder with the initial wait period set
-     */
     NeedsTimeIncrement retryAfter(long duration, TimeUnit unit);
   }
 
   public interface NeedsTimeIncrement {
-    /**
-     * @param duration the amount of additional time to add before each subsequent retry; input is
-     *        converted to milliseconds, rounded down to the nearest
-     * @return this builder with the increment amount set
-     */
     NeedsMaxWait incrementBy(long duration, TimeUnit unit);
   }
 
   public interface NeedsMaxWait {
-    /**
-     * @param duration the maximum amount of time to which the waiting period between retries can be
-     *        incremented; input is converted to milliseconds, rounded down to the nearest
-     * @return this builder with a maximum time limit set
-     */
     NeedsBackOffFactor maxWait(long duration, TimeUnit unit);
   }
 
   public interface NeedsBackOffFactor {
-    /**
-     * @param backOffFactor the number that the wait increment will be successively multiplied by to
-     *        make the time between retries to be exponentially increasing. The default value will
-     *        be one.
-     */
     NeedsLogInterval backOffFactor(double backOffFactor);
   }
 
   public interface NeedsLogInterval {
-    /**
-     * @param duration the minimum time interval between logging that a retry is occurring; input is
-     *        converted to milliseconds, rounded down to the nearest
-     * @return this builder with a logging interval set
-     */
     BuilderDone logInterval(long duration, TimeUnit unit);
   }
 
   public interface BuilderDone {
-    /**
-     * Create a RetryFactory from this builder which can be used to create many Retry objects with
-     * the same settings.
-     *
-     * @return this builder as a factory; intermediate references to this builder cannot be used to
-     *         change options after this has been called
-     */
     RetryFactory createFactory();
 
-    /**
-     * Create a single Retry object with the currently configured builder settings.
-     *
-     * @return a retry object from this builder's settings
-     */
     Retry createRetry();
   }
 
   public interface RetryFactory {
-    /**
-     * Create a single Retry object from this factory's settings.
-     *
-     * @return a retry object from this factory's settings
-     */
     Retry createRetry();
   }
 
@@ -435,6 +361,5 @@ public class Retry {
     public Retry createRetry() {
       return new Retry(maxRetries, initialWait, waitIncrement, maxWait, logInterval, backOffFactor);
     }
-
   }
 }
