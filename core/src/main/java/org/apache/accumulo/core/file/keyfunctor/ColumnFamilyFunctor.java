@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.keyfunctor;
 
 import org.apache.accumulo.core.data.ByteSequence;
@@ -29,24 +30,26 @@ public class ColumnFamilyFunctor implements KeyFunctor {
 
   @Override
   public Key transform(org.apache.accumulo.core.data.Key acuKey) {
+    byte[] keyData = combineRowAndColumnFamily(acuKey.getRowData(), acuKey.getColumnFamilyData());
+    return new Key(keyData, 1.0);
+  }
 
-    byte[] keyData;
-
-    ByteSequence row = acuKey.getRowData();
-    ByteSequence cf = acuKey.getColumnFamilyData();
-    keyData = new byte[row.length() + cf.length()];
+  private byte[] combineRowAndColumnFamily(ByteSequence row, ByteSequence cf) {
+    byte[] keyData = new byte[row.length() + cf.length()];
     System.arraycopy(row.getBackingArray(), row.offset(), keyData, 0, row.length());
     System.arraycopy(cf.getBackingArray(), cf.offset(), keyData, row.length(), cf.length());
-
-    return new Key(keyData, 1.0);
+    return keyData;
   }
 
   @Override
   public Key transform(Range range) {
-    if (RowFunctor.isRangeInBloomFilter(range, kDepth)) {
+    if (isRangeValidForBloomFilter(range)) {
       return transform(range.getStartKey());
     }
     return null;
   }
 
+  private boolean isRangeValidForBloomFilter(Range range) {
+    return RowFunctor.isRangeInBloomFilter(range, kDepth);
+  }
 }
