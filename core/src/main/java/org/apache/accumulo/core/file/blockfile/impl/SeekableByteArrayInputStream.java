@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.blockfile.impl;
 
 import static java.util.Objects.requireNonNull;
@@ -25,20 +26,8 @@ import java.io.InputStream;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-/**
- * This class is like byte array input stream with two differences. It supports seeking and avoids
- * synchronization.
- */
 public class SeekableByteArrayInputStream extends InputStream {
 
-  // making this volatile for the following case
-  // * thread 1 creates and initializes byte array
-  // * thread 2 reads from bye array
-  // spotbugs complains about this because thread2 may not see any changes to the byte array after
-  // thread 1 set the volatile,
-  // however the expectation is that the byte array is static. In the case of it being static,
-  // volatile ensures that
-  // thread 2 sees all of thread 1 changes before setting the volatile.
   @SuppressFBWarnings(value = "VO_VOLATILE_REFERENCE_TO_ARRAY",
       justification = "see explanation above")
   private volatile byte[] buffer;
@@ -47,54 +36,40 @@ public class SeekableByteArrayInputStream extends InputStream {
 
   @Override
   public int read() {
-    if (cur < max) {
-      return buffer[cur++] & 0xff;
-    } else {
-      return -1;
-    }
+    return (cur < max) ? (buffer[cur++] & 0xff) : -1;
   }
 
   @Override
   public int read(byte[] b, int offset, int length) {
-    if (b == null) {
-      throw new NullPointerException();
-    }
-
-    if (length < 0 || offset < 0 || length > b.length - offset) {
-      throw new IndexOutOfBoundsException();
-    }
-
+    validateReadParameters(b, offset, length);
     if (length == 0) {
       return 0;
     }
-
     int avail = max - cur;
-
     if (avail <= 0) {
       return -1;
     }
-
     if (length > avail) {
       length = avail;
     }
-
     System.arraycopy(buffer, cur, b, offset, length);
     cur += length;
     return length;
   }
 
+  private void validateReadParameters(byte[] b, int offset, int length) {
+    if (b == null) {
+      throw new NullPointerException();
+    }
+    if (length < 0 || offset < 0 || length > b.length - offset) {
+      throw new IndexOutOfBoundsException();
+    }
+  }
+
   @Override
   public long skip(long requestedSkip) {
-    int actualSkip = max - cur;
-    if (requestedSkip < actualSkip) {
-      if (requestedSkip < 0) {
-        actualSkip = 0;
-      } else {
-        actualSkip = (int) requestedSkip;
-      }
-    }
-
-    cur += actualSkip;
+    int actualSkip = Math.min((int) requestedSkip, max - cur);
+    cur += actualSkip > 0 ? actualSkip : 0;
     return actualSkip;
   }
 
@@ -109,27 +84,27 @@ public class SeekableByteArrayInputStream extends InputStream {
   }
 
   @Override
-  public synchronized void mark(int readAheadLimit) {
-    throw new UnsupportedOperationException();
+  public void mark(int readAheadLimit) {
+    throw new UnsupportedOperationException("Mark operation is not supported.");
   }
 
   @Override
-  public synchronized void reset() {
-    throw new UnsupportedOperationException();
+  public void reset() {
+    throw new UnsupportedOperationException("Reset operation is not supported.");
   }
 
   @Override
   public void close() throws IOException {}
 
   public SeekableByteArrayInputStream(byte[] buf) {
-    requireNonNull(buf, "bug argument was null");
+    requireNonNull(buf, "buf argument was null");
     this.buffer = buf;
     this.cur = 0;
     this.max = buf.length;
   }
 
   public SeekableByteArrayInputStream(byte[] buf, int maxOffset) {
-    requireNonNull(buf, "bug argument was null");
+    requireNonNull(buf, "buf argument was null");
     this.buffer = buf;
     this.cur = 0;
     this.max = maxOffset;
