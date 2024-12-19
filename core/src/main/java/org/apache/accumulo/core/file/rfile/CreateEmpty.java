@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.util.ArrayList;
@@ -38,10 +39,6 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.auto.service.AutoService;
 
-/**
- * Create an empty RFile for use in recovering from data loss where Accumulo still refers internally
- * to a path.
- */
 @AutoService(KeywordExecutable.class)
 public class CreateEmpty implements KeywordExecutable {
   private static final Logger log = LoggerFactory.getLogger(CreateEmpty.class);
@@ -99,14 +96,18 @@ public class CreateEmpty implements KeywordExecutable {
     opts.parseArgs("accumulo create-empty", args);
 
     for (String arg : opts.files) {
-      Path path = new Path(arg);
-      log.info("Writing to file '{}'", path);
-      FileSKVWriter writer = new RFileOperations().newWriterBuilder()
-          .forFile(arg, path.getFileSystem(conf), conf, NoCryptoServiceFactory.NONE)
-          .withTableConfiguration(DefaultConfiguration.getInstance()).withCompression(opts.codec)
-          .build();
-      writer.close();
+      writeFile(arg, conf, opts.codec);
     }
   }
 
+  private void writeFile(String filePath, Configuration conf, String codec) throws Exception {
+    Path path = new Path(filePath);
+    log.info("Writing to file '{}'", path);
+    try (FileSKVWriter writer = new RFileOperations().newWriterBuilder()
+        .forFile(filePath, path.getFileSystem(conf), conf, NoCryptoServiceFactory.NONE)
+        .withTableConfiguration(DefaultConfiguration.getInstance()).withCompression(codec)
+        .build()) {
+      // Writer is auto-closed
+    }
+  }
 }
