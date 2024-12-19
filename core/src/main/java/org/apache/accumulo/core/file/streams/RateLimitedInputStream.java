@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -35,7 +36,7 @@ public class RateLimitedInputStream extends FilterInputStream implements Seekabl
   public <StreamType extends InputStream & Seekable> RateLimitedInputStream(StreamType stream,
       RateLimiter rateLimiter) {
     super(stream);
-    this.rateLimiter = rateLimiter == null ? NullRateLimiter.INSTANCE : rateLimiter;
+    this.rateLimiter = rateLimiter != null ? rateLimiter : NullRateLimiter.INSTANCE;
   }
 
   @Override
@@ -58,16 +59,24 @@ public class RateLimitedInputStream extends FilterInputStream implements Seekabl
 
   @Override
   public void seek(long pos) throws IOException {
-    ((Seekable) in).seek(pos);
+    if (in instanceof Seekable) {
+      ((Seekable) in).seek(pos);
+    }
   }
 
   @Override
   public long getPos() throws IOException {
-    return ((Seekable) in).getPos();
+    if (in instanceof Seekable) {
+      return ((Seekable) in).getPos();
+    }
+    return 0;
   }
 
   @Override
   public boolean seekToNewSource(long targetPos) throws IOException {
-    return ((Seekable) in).seekToNewSource(targetPos);
+    if (in instanceof Seekable) {
+      return ((Seekable) in).seekToNewSource(targetPos);
+    }
+    return false;
   }
 }
