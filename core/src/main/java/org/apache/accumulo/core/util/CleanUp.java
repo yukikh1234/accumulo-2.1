@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util;
 
 import java.util.Set;
@@ -47,7 +30,7 @@ public class CleanUp {
   private static final Logger log = LoggerFactory.getLogger(CleanUp.class);
 
   /**
-   * kills all threads created by internal Accumulo singleton resources. After this method is
+   * Kills all threads created by internal Accumulo singleton resources. After this method is
    * called, no Connector will work in the current classloader.
    *
    * @param conn If available, Connector object to close resources on. Will accept null otherwise.
@@ -56,30 +39,50 @@ public class CleanUp {
     SingletonManager.setMode(Mode.CLIENT);
     waitForZooKeeperClientThreads();
     if (conn != null) {
-      ConnectorImpl connImpl = (ConnectorImpl) conn;
-      connImpl.getAccumuloClient().close();
+      try {
+        ConnectorImpl connImpl = (ConnectorImpl) conn;
+        connImpl.getAccumuloClient().close();
+      } catch (Exception e) {
+        log.error("Failed to close AccumuloClient: {}", e.getMessage(), e);
+      }
     }
   }
 
   /**
    * As documented in https://issues.apache.org/jira/browse/ZOOKEEPER-1816, ZooKeeper.close() is a
-   * non-blocking call. This method will wait on the ZooKeeper internal threads to exit.
+   * non-blocking call. This method waits for the ZooKeeper internal threads to exit.
    */
   private static void waitForZooKeeperClientThreads() {
     Set<Thread> threadSet = Thread.getAllStackTraces().keySet();
     for (Thread thread : threadSet) {
-      // find ZooKeeper threads that were created in the same ClassLoader as the current thread.
-      if (thread.getClass().getName().startsWith("org.apache.zookeeper.ClientCnxn") && thread
-          .getContextClassLoader().equals(Thread.currentThread().getContextClassLoader())) {
+      if (isZooKeeperClientThread(thread)) {
+        waitForThreadToDie(thread);
+      }
+    }
+  }
 
-        // wait for the thread the die
-        while (thread.isAlive()) {
-          try {
-            Thread.sleep(100);
-          } catch (InterruptedException e) {
-            log.error("{}", e.getMessage(), e);
-          }
-        }
+  /**
+   * Checks whether a thread is a ZooKeeper client thread in the current ClassLoader.
+   *
+   * @param thread The thread to check.
+   * @return true if the thread is a ZooKeeper client thread, false otherwise.
+   */
+  private static boolean isZooKeeperClientThread(Thread thread) {
+    return thread.getClass().getName().startsWith("org.apache.zookeeper.ClientCnxn")
+        && thread.getContextClassLoader().equals(Thread.currentThread().getContextClassLoader());
+  }
+
+  /**
+   * Waits for the given thread to die.
+   *
+   * @param thread The thread to wait for.
+   */
+  private static void waitForThreadToDie(Thread thread) {
+    while (thread.isAlive()) {
+      try {
+        Thread.sleep(100);
+      } catch (InterruptedException e) {
+        log.error("Interrupted while waiting for thread to die: {}", e.getMessage(), e);
       }
     }
   }
