@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -39,13 +40,18 @@ public class DiscardCloseOutputStream extends FilterOutputStream {
    */
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
+    if (b == null) {
+      throw new NullPointerException("The byte array is null");
+    }
+    if ((off < 0) || (len < 0) || (off + len > b.length)) {
+      throw new IndexOutOfBoundsException("Offset or length is out of bounds");
+    }
     out.write(b, off, len);
   }
 
   @Override
   public void close() throws IOException {
-    // Discard
+    // Discarding close to ensure the underlying stream remains open.
     log.trace("Discarded close");
   }
-
 }
