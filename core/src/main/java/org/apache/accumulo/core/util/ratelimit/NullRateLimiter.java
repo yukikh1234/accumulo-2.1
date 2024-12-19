@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -21,7 +22,7 @@ package org.apache.accumulo.core.util.ratelimit;
 /**
  * A rate limiter which doesn't actually limit rates at all.
  */
-public class NullRateLimiter implements RateLimiter {
+public final class NullRateLimiter implements RateLimiter {
   public static final NullRateLimiter INSTANCE = new NullRateLimiter();
 
   private NullRateLimiter() {}
@@ -32,6 +33,7 @@ public class NullRateLimiter implements RateLimiter {
   }
 
   @Override
-  public void acquire(long numPermits) {}
-
+  public void acquire(long numPermits) {
+    // No operation performed
+  }
 }
