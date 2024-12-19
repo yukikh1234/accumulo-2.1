@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util.tables;
 
 import static org.apache.accumulo.core.util.Validators.EXISTING_TABLE_NAME;
@@ -33,11 +34,9 @@ public class TableNameUtil {
 
   public static String qualified(String tableName, String defaultNamespace) {
     Pair<String,String> qualifiedTableName = qualify(tableName, defaultNamespace);
-    if (Namespace.DEFAULT.name().equals(qualifiedTableName.getFirst())) {
-      return qualifiedTableName.getSecond();
-    } else {
-      return qualifiedTableName.toString("", ".", "");
-    }
+    return Namespace.DEFAULT.name().equals(qualifiedTableName.getFirst())
+        ? qualifiedTableName.getSecond()
+        : String.join(".", qualifiedTableName.getFirst(), qualifiedTableName.getSecond());
   }
 
   public static Pair<String,String> qualify(String tableName) {
@@ -46,10 +45,12 @@ public class TableNameUtil {
 
   private static Pair<String,String> qualify(String tableName, String defaultNamespace) {
     EXISTING_TABLE_NAME.validate(tableName);
-    if (tableName.contains(".")) {
-      String[] s = tableName.split("\\.", 2);
-      return new Pair<>(s[0], s[1]);
-    }
-    return new Pair<>(defaultNamespace, tableName);
+    return tableName.contains(".") ? splitTableName(tableName)
+        : new Pair<>(defaultNamespace, tableName);
+  }
+
+  private static Pair<String,String> splitTableName(String tableName) {
+    String[] parts = tableName.split("\\.", 2);
+    return new Pair<>(parts[0], parts[1]);
   }
 }
