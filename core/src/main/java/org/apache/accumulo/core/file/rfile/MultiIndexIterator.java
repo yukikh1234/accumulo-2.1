@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.io.DataInputStream;
@@ -45,29 +28,25 @@ class MultiIndexIterator extends HeapIterator implements FileSKVIterator {
 
   MultiIndexIterator(RFile.Reader source, List<Iterator<IndexEntry>> indexes) {
     super(indexes.size());
-
     this.source = source;
-
-    for (Iterator<IndexEntry> index : indexes) {
-      addSource(new IndexIterator(index));
-    }
+    indexes.forEach(index -> addSource(new IndexIterator(index)));
   }
 
   @Override
   public SortedKeyValueIterator<Key,Value> deepCopy(IteratorEnvironment env) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("deepCopy is not supported in MultiIndexIterator.");
   }
 
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
       IteratorEnvironment env) throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("init is not supported in MultiIndexIterator.");
   }
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
       throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("seek is not supported in MultiIndexIterator.");
   }
 
   @Override
@@ -77,37 +56,40 @@ class MultiIndexIterator extends HeapIterator implements FileSKVIterator {
 
   @Override
   public void closeDeepCopies() throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(
+        "closeDeepCopies is not supported in MultiIndexIterator.");
   }
 
   @Override
   public Key getFirstKey() throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("getFirstKey is not supported in MultiIndexIterator.");
   }
 
   @Override
   public Key getLastKey() throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("getLastKey is not supported in MultiIndexIterator.");
   }
 
   @Override
   public DataInputStream getMetaStore(String name) throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("getMetaStore is not supported in MultiIndexIterator.");
   }
 
   @Override
   public long estimateOverlappingEntries(KeyExtent extent) throws IOException {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(
+        "estimateOverlappingEntries is not supported in MultiIndexIterator.");
   }
 
   @Override
   public void setInterruptFlag(AtomicBoolean flag) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(
+        "setInterruptFlag is not supported in MultiIndexIterator.");
   }
 
   @Override
   public FileSKVIterator getSample(SamplerConfigurationImpl sampleConfig) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("getSample is not supported in MultiIndexIterator.");
   }
 
   @Override
