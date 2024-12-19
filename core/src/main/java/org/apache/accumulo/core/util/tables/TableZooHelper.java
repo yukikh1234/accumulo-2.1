@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util.tables;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -46,8 +29,6 @@ import com.google.common.cache.CacheBuilder;
 public class TableZooHelper implements AutoCloseable {
 
   private final ClientContext context;
-  // Per instance cache will expire after 10 minutes in case we
-  // encounter an instance not used frequently
   private final Cache<TableZooHelper,TableMap> instanceToMapCache =
       CacheBuilder.newBuilder().expireAfterAccess(10, MINUTES).build();
 
@@ -55,12 +36,6 @@ public class TableZooHelper implements AutoCloseable {
     this.context = Objects.requireNonNull(context);
   }
 
-  /**
-   * Lookup table ID in ZK.
-   *
-   * @throws TableNotFoundException if not found; if the namespace was not found, this has a
-   *         getCause() of NamespaceNotFoundException
-   */
   public TableId getTableId(String tableName) throws TableNotFoundException {
     if (MetadataTable.NAME.equals(tableName)) {
       return MetadataTable.ID;
@@ -68,6 +43,10 @@ public class TableZooHelper implements AutoCloseable {
     if (RootTable.NAME.equals(tableName)) {
       return RootTable.ID;
     }
+    return fetchTableId(tableName);
+  }
+
+  private TableId fetchTableId(String tableName) throws TableNotFoundException {
     try {
       return _getTableIdDetectNamespaceNotFound(EXISTING_TABLE_NAME.validate(tableName));
     } catch (NamespaceNotFoundException e) {
@@ -75,27 +54,26 @@ public class TableZooHelper implements AutoCloseable {
     }
   }
 
-  /**
-   * Lookup table ID in ZK. If not found, clears cache and tries again.
-   */
   public TableId _getTableIdDetectNamespaceNotFound(String tableName)
       throws NamespaceNotFoundException, TableNotFoundException {
     TableId tableId = getTableMap().getNameToIdMap().get(tableName);
     if (tableId == null) {
-      // maybe the table exist, but the cache was not updated yet...
-      // so try to clear the cache and check again
       clearTableListCache();
       tableId = getTableMap().getNameToIdMap().get(tableName);
       if (tableId == null) {
-        String namespace = TableNameUtil.qualify(tableName).getFirst();
-        if (Namespaces.getNameToIdMap(context).containsKey(namespace)) {
-          throw new TableNotFoundException(null, tableName, null);
-        } else {
-          throw new NamespaceNotFoundException(null, namespace, null);
-        }
+        handleNamespaceNotFound(tableName);
       }
     }
     return tableId;
+  }
+
+  private void handleNamespaceNotFound(String tableName)
+      throws NamespaceNotFoundException, TableNotFoundException {
+    String namespace = TableNameUtil.qualify(tableName).getFirst();
+    if (!Namespaces.getNameToIdMap(context).containsKey(namespace)) {
+      throw new NamespaceNotFoundException(null, namespace, null);
+    }
+    throw new TableNotFoundException(null, tableName, null);
   }
 
   public String getTableName(TableId tableId) throws TableNotFoundException {
@@ -112,10 +90,6 @@ public class TableZooHelper implements AutoCloseable {
     return tableName;
   }
 
-  /**
-   * Get the TableMap from the cache. A new one will be populated when needed. Cache is cleared
-   * manually by calling {@link #clearTableListCache()}
-   */
   public TableMap getTableMap() {
     final ZooCache zc = context.getZooCache();
     TableMap map = getCachedTableMap();
@@ -167,14 +141,6 @@ public class TableZooHelper implements AutoCloseable {
         tableId == null ? "?" : tableId.canonical());
   }
 
-  /**
-   * Get the current state of the table using the tableid. The boolean clearCache, if true will
-   * clear the table state in zookeeper before fetching the state. Added with ACCUMULO-4574.
-   *
-   * @param tableId the table id
-   * @param clearCachedState if true clear the table state in zookeeper before checking status
-   * @return the table state.
-   */
   public TableState getTableState(TableId tableId, boolean clearCachedState) {
     String statePath = context.getZooKeeperRoot() + Constants.ZTABLES + "/" + tableId.canonical()
         + Constants.ZTABLE_STATE;
@@ -182,6 +148,10 @@ public class TableZooHelper implements AutoCloseable {
       context.getZooCache().clear(context.getZooKeeperRoot() + statePath);
       instanceToMapCache.invalidateAll();
     }
+    return fetchTableState(statePath);
+  }
+
+  private TableState fetchTableState(String statePath) {
     ZooCache zc = context.getZooCache();
     byte[] state = zc.get(statePath);
     if (state == null) {
@@ -190,13 +160,6 @@ public class TableZooHelper implements AutoCloseable {
     return TableState.valueOf(new String(state, UTF_8));
   }
 
-  /**
-   * Returns the namespace id for a given table ID.
-   *
-   * @param tableId The tableId
-   * @return The namespace id which this table resides in.
-   * @throws IllegalArgumentException if the table doesn't exist in ZooKeeper
-   */
   public NamespaceId getNamespaceId(TableId tableId) throws TableNotFoundException {
     checkArgument(context != null, "instance is null");
     checkArgument(tableId != null, "tableId is null");
@@ -205,10 +168,13 @@ public class TableZooHelper implements AutoCloseable {
       return Namespace.ACCUMULO.id();
     }
 
+    return fetchNamespaceId(tableId);
+  }
+
+  private NamespaceId fetchNamespaceId(TableId tableId) throws TableNotFoundException {
     ZooCache zc = context.getZooCache();
     byte[] n = zc.get(context.getZooKeeperRoot() + Constants.ZTABLES + "/" + tableId
         + Constants.ZTABLE_NAMESPACE);
-    // We might get null out of ZooCache if this tableID doesn't exist
     if (n == null) {
       throw new TableNotFoundException(tableId.canonical(), null, null);
     }
