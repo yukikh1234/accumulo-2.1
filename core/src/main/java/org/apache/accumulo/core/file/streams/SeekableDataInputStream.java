@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.streams;
 
 import java.io.DataInputStream;
@@ -29,22 +30,35 @@ import org.apache.hadoop.fs.Seekable;
  * {@link DataInputStream}
  */
 public class SeekableDataInputStream extends DataInputStream implements Seekable {
+
   public <StreamType extends InputStream & Seekable> SeekableDataInputStream(StreamType stream) {
     super(stream);
   }
 
   @Override
   public void seek(long pos) throws IOException {
-    ((Seekable) in).seek(pos);
+    if (in instanceof Seekable) {
+      ((Seekable) in).seek(pos);
+    } else {
+      throw new IOException("Underlying stream does not support seek");
+    }
   }
 
   @Override
   public long getPos() throws IOException {
-    return ((Seekable) in).getPos();
+    if (in instanceof Seekable) {
+      return ((Seekable) in).getPos();
+    } else {
+      throw new IOException("Underlying stream does not support getPos");
+    }
   }
 
   @Override
   public boolean seekToNewSource(long targetPos) throws IOException {
-    return ((Seekable) in).seekToNewSource(targetPos);
+    if (in instanceof Seekable) {
+      return ((Seekable) in).seekToNewSource(targetPos);
+    } else {
+      throw new IOException("Underlying stream does not support seekToNewSource");
+    }
   }
 }
