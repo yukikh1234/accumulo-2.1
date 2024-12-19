@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.crypto.streams;
 
 import java.io.DataInputStream;
@@ -28,148 +29,133 @@ import java.io.InputStream;
  * data (size bytes) junk (however many bytes it takes to complete a block)
  */
 public class BlockedInputStream extends InputStream {
-  byte[] array;
-  // ReadPos is where to start reading
-  // WritePos is the last position written to
-  int readPos, writePos;
-  DataInputStream in;
-  int blockSize;
-  boolean finished = false;
+  private byte[] buffer;
+  private int readPos, writePos;
+  private final DataInputStream inStream;
+  private final int blockSize;
+  private boolean isFinished = false;
 
   public BlockedInputStream(InputStream in, int blockSize, int maxSize) {
-    if (blockSize == 0) {
-      throw new RuntimeException("Invalid block size");
+    if (blockSize <= 0) {
+      throw new IllegalArgumentException("Block size must be greater than zero");
     }
-    if (in instanceof DataInputStream) {
-      this.in = (DataInputStream) in;
-    } else {
-      this.in = new DataInputStream(in);
-    }
-
-    array = new byte[maxSize];
-    readPos = 0;
-    writePos = -1;
-
+    this.inStream =
+        (in instanceof DataInputStream) ? (DataInputStream) in : new DataInputStream(in);
+    this.buffer = new byte[maxSize];
+    this.readPos = 0;
+    this.writePos = -1;
     this.blockSize = blockSize;
   }
 
   @Override
   public int read() throws IOException {
-    if (remaining() > 0) {
-      return (array[readAndIncrement(1)] & 0xFF);
+    if (getRemainingBytes() > 0) {
+      return buffer[incrementReadPosition(1)] & 0xFF;
     }
     return -1;
   }
 
-  private int readAndIncrement(int toAdd) {
-    int toRet = readPos;
-    readPos += toAdd;
-    if (readPos == array.length) {
-      readPos = 0;
-    } else if (readPos > array.length) {
-      throw new RuntimeException(
-          "Unexpected state, this should only ever increase or cycle on the boundary!");
+  private int incrementReadPosition(int increment) {
+    int currentPosition = readPos;
+    readPos += increment;
+    if (readPos >= buffer.length) {
+      readPos -= buffer.length;
     }
-    return toRet;
+    return currentPosition;
   }
 
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
-    int toCopy = Math.min(len, remaining());
-    if (toCopy > 0) {
-      System.arraycopy(array, readPos, b, off, toCopy);
-      readAndIncrement(toCopy);
+    int bytesToCopy = Math.min(len, getRemainingBytes());
+    if (bytesToCopy > 0) {
+      System.arraycopy(buffer, readPos, b, off, bytesToCopy);
+      incrementReadPosition(bytesToCopy);
     }
-    return toCopy;
+    return bytesToCopy;
   }
 
-  private int remaining() throws IOException {
-    if (finished) {
+  private int getRemainingBytes() throws IOException {
+    if (isFinished) {
       return -1;
     }
-    if (available() == 0) {
-      refill();
+    if (getAvailableBytes() == 0) {
+      loadBuffer();
     }
-
-    return available();
+    return getAvailableBytes();
   }
 
-  // Amount available to read
   @Override
   public int available() {
-    int toRet = writePos + 1 - readPos;
-    if (toRet < 0) {
-      toRet += array.length;
-    }
-    return Math.min(array.length - readPos, toRet);
+    return getAvailableBytes();
   }
 
-  private boolean refill() throws IOException {
-    if (finished) {
+  private int getAvailableBytes() {
+    int availableBytes = writePos + 1 - readPos;
+    if (availableBytes < 0) {
+      availableBytes += buffer.length;
+    }
+    return Math.min(buffer.length - readPos, availableBytes);
+  }
+
+  private boolean loadBuffer() throws IOException {
+    if (isFinished) {
       return false;
     }
-    int size;
+    int dataSize;
     try {
-      size = in.readInt();
+      dataSize = inStream.readInt();
     } catch (EOFException eof) {
-      finished = true;
+      isFinished = true;
       return false;
     }
 
-    // Shortcut for if we're reading garbage data
-    if (size < 0 || size > array.length) {
-      finished = true;
+    if (dataSize <= 0 || dataSize > buffer.length) {
+      isFinished = true;
       return false;
-    } else if (size == 0) {
-      throw new RuntimeException(
-          "Empty block written, this shouldn't happen with this BlockedOutputStream.");
     }
 
-    // We have already checked, not concerned with looping the buffer here
-    int bufferAvailable = array.length - readPos;
-    if (size > bufferAvailable) {
-      in.readFully(array, writePos + 1, bufferAvailable);
-      in.readFully(array, 0, size - bufferAvailable);
-    } else {
-      in.readFully(array, writePos + 1, size);
-    }
-    writePos += size;
-    if (writePos >= array.length - 1) {
-      writePos -= array.length;
-    }
-
-    // Skip the cruft
-    int remainder = blockSize - ((size + 4) % blockSize);
-    if (remainder != blockSize) {
-      // If remainder isn't spilling the rest of the block, we know it's incomplete.
-      if (in.available() < remainder) {
-        undoWrite(size);
-        return false;
-      }
-      in.skip(remainder);
-    }
+    fillBuffer(dataSize);
+    skipJunkData(dataSize);
 
     return true;
   }
 
-  private void undoWrite(int size) {
-    writePos = writePos - size;
+  private void fillBuffer(int dataSize) throws IOException {
+    int bufferAvailable = buffer.length - readPos;
+    if (dataSize > bufferAvailable) {
+      inStream.readFully(buffer, writePos + 1, bufferAvailable);
+      inStream.readFully(buffer, 0, dataSize - bufferAvailable);
+    } else {
+      inStream.readFully(buffer, writePos + 1, dataSize);
+    }
+    writePos = (writePos + dataSize) % buffer.length;
+  }
+
+  private void skipJunkData(int dataSize) throws IOException {
+    int remainder = blockSize - ((dataSize + 4) % blockSize);
+    if (remainder != blockSize && inStream.available() < remainder) {
+      rollbackWrite(dataSize);
+      throw new IOException("Insufficient data to skip");
+    }
+    inStream.skip(remainder);
+  }
+
+  private void rollbackWrite(int dataSize) {
+    writePos -= dataSize;
     if (writePos < -1) {
-      writePos += array.length;
+      writePos += buffer.length;
     }
   }
 
   @Override
   public long skip(long n) {
     throw new UnsupportedOperationException();
-    // available(n);
-    // bb.position(bb.position()+(int)n);
   }
 
   @Override
   public void close() throws IOException {
-    array = null;
-    in.close();
+    buffer = null;
+    inStream.close();
   }
 
   @Override
@@ -179,7 +165,7 @@ public class BlockedInputStream extends InputStream {
 
   @Override
   public synchronized void reset() throws IOException {
-    in.reset();
+    inStream.reset();
     readPos = 0;
     writePos = -1;
   }
