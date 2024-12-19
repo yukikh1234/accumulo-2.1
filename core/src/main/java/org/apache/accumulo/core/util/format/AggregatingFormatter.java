@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,14 +29,19 @@ import org.apache.accumulo.core.data.Value;
  * Formatter that will aggregate entries for various display purposes.
  */
 public abstract class AggregatingFormatter extends DefaultFormatter {
+
   @Override
   public String next() {
     Iterator<Entry<Key,Value>> si = super.getScannerIterator();
     checkState(true);
-    while (si.hasNext()) {
-      aggregateStats(si.next());
-    }
+    processEntries(si);
     return getStats();
+  }
+
+  private void processEntries(Iterator<Entry<Key,Value>> iterator) {
+    while (iterator.hasNext()) {
+      aggregateStats(iterator.next());
+    }
   }
 
   /**
