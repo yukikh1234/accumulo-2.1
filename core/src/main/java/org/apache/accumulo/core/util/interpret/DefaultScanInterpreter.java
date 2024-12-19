@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,27 +29,30 @@ public class DefaultScanInterpreter implements ScanInterpreter {
 
   @Override
   public Text interpretRow(Text row) {
-    return row;
+    return interpret(row);
   }
 
   @Override
   public Text interpretBeginRow(Text row) {
-    return row;
+    return interpret(row);
   }
 
   @Override
   public Text interpretEndRow(Text row) {
-    return row;
+    return interpret(row);
   }
 
   @Override
   public Text interpretColumnFamily(Text cf) {
-    return cf;
+    return interpret(cf);
   }
 
   @Override
   public Text interpretColumnQualifier(Text cq) {
-    return cq;
+    return interpret(cq);
   }
 
+  private Text interpret(Text text) {
+    return text;
+  }
 }
