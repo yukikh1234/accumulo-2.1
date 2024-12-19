@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util.compaction;
 
 import java.util.HashMap;
@@ -31,21 +32,28 @@ import org.apache.accumulo.core.spi.compaction.DefaultCompactionPlanner;
 
 import com.google.common.collect.Sets;
 
-/**
- * This class serves to configure compaction services from an {@link AccumuloConfiguration} object.
- *
- * Specifically, compaction service properties (those prefixed by "tserver.compaction.major
- * .service") are used.
- */
 public class CompactionServicesConfig {
 
   private final Map<String,String> planners = new HashMap<>();
   private final Map<String,Long> rateLimits = new HashMap<>();
   private final Map<String,Map<String,String>> options = new HashMap<>();
-  long defaultRateLimit;
+  private long defaultRateLimit;
   private final Consumer<String> deprecationWarningConsumer;
 
   public static final CompactionServiceId DEFAULT_SERVICE = CompactionServiceId.of("default");
+
+  public CompactionServicesConfig(AccumuloConfiguration aconf,
+      Consumer<String> deprecationWarningConsumer) {
+    this.deprecationWarningConsumer = deprecationWarningConsumer;
+    initializeConfig(aconf);
+  }
+
+  private void initializeConfig(AccumuloConfiguration aconf) {
+    Map<String,String> configs = getConfiguration(aconf);
+    processConfigs(configs, aconf);
+    defaultRateLimit = getDefaultThroughput(aconf);
+    validateServiceDefinitions();
+  }
 
   @SuppressWarnings("removal")
   private long getDefaultThroughput(AccumuloConfiguration aconf) {
@@ -59,69 +67,68 @@ public class CompactionServicesConfig {
 
   @SuppressWarnings("removal")
   private Map<String,String> getConfiguration(AccumuloConfiguration aconf) {
-
     Map<String,String> configs =
         aconf.getAllPropertiesWithPrefix(Property.TSERV_COMPACTION_SERVICE_PREFIX);
-
-    // check if deprecated properties for compaction executor are set
-    if (aconf.isPropertySet(Property.TSERV_MAJC_MAXCONCURRENT)) {
-
-      String defaultServicePrefix =
-          Property.TSERV_COMPACTION_SERVICE_PREFIX.getKey() + DEFAULT_SERVICE.canonical() + ".";
-
-      // check if any properties for the default compaction service are set
-      boolean defaultServicePropsSet = configs.keySet().stream()
-          .filter(key -> key.startsWith(defaultServicePrefix)).map(Property::getPropertyByKey)
-          .anyMatch(prop -> prop == null || aconf.isPropertySet(prop));
-
-      if (defaultServicePropsSet) {
-
-        String warning = "The deprecated property " + Property.TSERV_MAJC_MAXCONCURRENT.getKey()
-            + " was set. Properties with the prefix " + defaultServicePrefix
-            + " were also set which replace the deprecated properties. The deprecated property "
-            + "was therefore ignored.";
-
-        deprecationWarningConsumer.accept(warning);
-
-      } else {
-        String numThreads = aconf.get(Property.TSERV_MAJC_MAXCONCURRENT);
-
-        // Its possible a user has configured the other compaction services, but not the default
-        // service. In this case want to produce a config with the default service configs
-        // overridden using deprecated configs.
-
-        HashMap<String,String> configsCopy = new HashMap<>(configs);
-
-        Map<String,String> defaultServiceConfigs =
-            Map.of(defaultServicePrefix + "planner", DefaultCompactionPlanner.class.getName(),
-                defaultServicePrefix + "planner.opts.executors",
-                "[{'name':'deprecated', 'numThreads':" + numThreads + "}]");
-
-        configsCopy.putAll(defaultServiceConfigs);
-
-        String warning = "The deprecated property " + Property.TSERV_MAJC_MAXCONCURRENT.getKey()
-            + " was set. Properties with the prefix " + defaultServicePrefix
-            + " were not set, these should replace the deprecated properties. The old properties "
-            + "were automatically mapped to the new properties in process creating : "
-            + defaultServiceConfigs + ".";
-
-        deprecationWarningConsumer.accept(warning);
-
-        configs = Map.copyOf(configsCopy);
-      }
-    }
-
+    checkDeprecatedProperties(configs, aconf);
     return configs;
-
   }
 
-  public CompactionServicesConfig(AccumuloConfiguration aconf,
-      Consumer<String> deprecationWarningConsumer) {
-    this.deprecationWarningConsumer = deprecationWarningConsumer;
-    Map<String,String> configs = getConfiguration(aconf);
+  private void checkDeprecatedProperties(Map<String,String> configs, AccumuloConfiguration aconf) {
+    if (aconf.isPropertySet(Property.TSERV_MAJC_MAXCONCURRENT)) {
+      handleDeprecatedProperties(configs, aconf);
+    }
+  }
 
+  private void handleDeprecatedProperties(Map<String,String> configs, AccumuloConfiguration aconf) {
+    String defaultServicePrefix =
+        Property.TSERV_COMPACTION_SERVICE_PREFIX.getKey() + DEFAULT_SERVICE.canonical() + ".";
+    boolean defaultServicePropsSet = isDefaultServicePropsSet(configs, aconf, defaultServicePrefix);
+
+    if (defaultServicePropsSet) {
+      emitWarningForDefaultServiceProps(defaultServicePrefix);
+    } else {
+      configs = applyDeprecatedProperties(configs, aconf, defaultServicePrefix);
+    }
+  }
+
+  private boolean isDefaultServicePropsSet(Map<String,String> configs, AccumuloConfiguration aconf,
+      String defaultServicePrefix) {
+    return configs.keySet().stream().filter(key -> key.startsWith(defaultServicePrefix))
+        .map(Property::getPropertyByKey)
+        .anyMatch(prop -> prop == null || aconf.isPropertySet(prop));
+  }
+
+  private void emitWarningForDefaultServiceProps(String defaultServicePrefix) {
+    String warning = "The deprecated property " + Property.TSERV_MAJC_MAXCONCURRENT.getKey()
+        + " was set. Properties with the prefix " + defaultServicePrefix
+        + " were also set which replace the deprecated properties. The deprecated property "
+        + "was therefore ignored.";
+    deprecationWarningConsumer.accept(warning);
+  }
+
+  private Map<String,String> applyDeprecatedProperties(Map<String,String> configs,
+      AccumuloConfiguration aconf, String defaultServicePrefix) {
+    String numThreads = aconf.get(Property.TSERV_MAJC_MAXCONCURRENT);
+    HashMap<String,String> configsCopy = new HashMap<>(configs);
+
+    Map<String,String> defaultServiceConfigs = Map.of(defaultServicePrefix + "planner",
+        DefaultCompactionPlanner.class.getName(), defaultServicePrefix + "planner.opts.executors",
+        "[{'name':'deprecated', 'numThreads':" + numThreads + "}]");
+
+    configsCopy.putAll(defaultServiceConfigs);
+
+    String warning = "The deprecated property " + Property.TSERV_MAJC_MAXCONCURRENT.getKey()
+        + " was set. Properties with the prefix " + defaultServicePrefix
+        + " were not set, these should replace the deprecated properties. The old properties "
+        + "were automatically mapped to the new properties in process creating : "
+        + defaultServiceConfigs + ".";
+
+    deprecationWarningConsumer.accept(warning);
+    return Map.copyOf(configsCopy);
+  }
+
+  private void processConfigs(Map<String,String> configs, AccumuloConfiguration aconf) {
     configs.forEach((prop, val) -> {
-
       var suffix = prop.substring(Property.TSERV_COMPACTION_SERVICE_PREFIX.getKey().length());
       String[] tokens = suffix.split("\\.");
       if (tokens.length == 4 && tokens[1].equals("planner") && tokens[2].equals("opts")) {
@@ -129,24 +136,26 @@ public class CompactionServicesConfig {
       } else if (tokens.length == 2 && tokens[1].equals("planner")) {
         planners.put(tokens[0], val);
       } else if (tokens.length == 3 && tokens[1].equals("rate") && tokens[2].equals("limit")) {
-        var eprop = Property.getPropertyByKey(prop);
-        if (eprop == null || aconf.isPropertySet(eprop) || !isDeprecatedThroughputSet(aconf)) {
+        if (shouldSetRateLimit(aconf, prop)) {
           rateLimits.put(tokens[0], ConfigurationTypeHelper.getFixedMemoryAsBytes(val));
         }
       } else {
         throw new IllegalArgumentException("Malformed compaction service property " + prop);
       }
     });
+  }
 
-    defaultRateLimit = getDefaultThroughput(aconf);
+  private boolean shouldSetRateLimit(AccumuloConfiguration aconf, String prop) {
+    var eprop = Property.getPropertyByKey(prop);
+    return eprop == null || aconf.isPropertySet(eprop) || !isDeprecatedThroughputSet(aconf);
+  }
 
+  private void validateServiceDefinitions() {
     var diff = Sets.difference(options.keySet(), planners.keySet());
-
     if (!diff.isEmpty()) {
       throw new IllegalArgumentException(
           "Incomplete compaction service definitions, missing planner class " + diff);
     }
-
   }
 
   @SuppressWarnings("removal")
@@ -165,7 +174,6 @@ public class CompactionServicesConfig {
       return getPlanners().equals(oc.getPlanners()) && getOptions().equals(oc.getOptions())
           && getRateLimits().equals(oc.getRateLimits());
     }
-
     return false;
   }
 
