@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import static org.apache.accumulo.core.metadata.schema.TabletMetadata.ColumnType.FILES;
@@ -102,17 +103,13 @@ public class Merge {
     opts.parseArgs(Merge.class.getName(), args);
     Span span = TraceUtil.startSpan(Merge.class, "start");
     try (Scope scope = span.makeCurrent()) {
-
       try (AccumuloClient client = Accumulo.newClient().from(opts.getClientProps()).build()) {
-
         if (!client.tableOperations().exists(opts.tableName)) {
           System.err.println("table " + opts.tableName + " does not exist");
           return;
         }
         if (opts.goalSize == null || opts.goalSize < 1) {
-          AccumuloConfiguration tableConfig =
-              new ConfigurationCopy(client.tableOperations().getConfiguration(opts.tableName));
-          opts.goalSize = tableConfig.getAsBytes(Property.TABLE_SPLIT_THRESHOLD);
+          opts.goalSize = getGoalSize(client, opts.tableName);
         }
 
         message("Merging tablets in table %s to %d bytes", opts.tableName, opts.goalSize);
@@ -124,6 +121,12 @@ public class Merge {
         span.end();
       }
     }
+  }
+
+  private long getGoalSize(AccumuloClient client, String tableName) throws Exception {
+    AccumuloConfiguration tableConfig =
+        new ConfigurationCopy(client.tableOperations().getConfiguration(tableName));
+    return tableConfig.getAsBytes(Property.TABLE_SPLIT_THRESHOLD);
   }
 
   public static void main(String[] args) throws MergeException {
@@ -149,7 +152,6 @@ public class Merge {
       }
       List<Size> sizes = new ArrayList<>();
       long totalSize = 0;
-      // Merge any until you get larger than the goal size, and then merge one less tablet
       Iterator<Size> sizeIterator = getSizeIterator(client, table, start, end);
       while (sizeIterator.hasNext()) {
         Size next = sizeIterator.next();
@@ -169,19 +171,37 @@ public class Merge {
 
   protected long mergeMany(AccumuloClient client, String table, List<Size> sizes, long goalSize,
       boolean force, boolean last) throws MergeException {
-    // skip the big tablets, which will be the typical case
-    while (!sizes.isEmpty()) {
-      if (sizes.get(0).size < goalSize) {
-        break;
-      }
-      sizes.remove(0);
-    }
+    removeLargeSizes(sizes, goalSize);
     if (sizes.isEmpty()) {
       return 0;
     }
 
-    // collect any small ones
     long mergeSize = 0;
+    int numToMerge = calculateNumToMerge(sizes, goalSize, mergeSize);
+
+    if (numToMerge > 1) {
+      mergeSome(client, table, sizes, numToMerge);
+    } else if (numToMerge == 1 && sizes.size() > 1) {
+      if (force) {
+        mergeSome(client, table, sizes, 2);
+      } else {
+        sizes.remove(0);
+      }
+    }
+
+    if (numToMerge == 0 && sizes.size() > 1 && last) {
+      mergeSome(client, table, sizes, sizes.size());
+    }
+    return getTotalSize(sizes);
+  }
+
+  private void removeLargeSizes(List<Size> sizes, long goalSize) {
+    while (!sizes.isEmpty() && sizes.get(0).size >= goalSize) {
+      sizes.remove(0);
+    }
+  }
+
+  private int calculateNumToMerge(List<Size> sizes, long goalSize, long mergeSize) {
     int numToMerge = 0;
     for (int i = 0; i < sizes.size(); i++) {
       if (mergeSize + sizes.get(i).size > goalSize) {
@@ -190,29 +210,11 @@ public class Merge {
       }
       mergeSize += sizes.get(i).size;
     }
+    return numToMerge;
+  }
 
-    if (numToMerge > 1) {
-      mergeSome(client, table, sizes, numToMerge);
-    } else {
-      if (numToMerge == 1 && sizes.size() > 1) {
-        // here we have the case of a merge candidate that is surrounded by candidates that would
-        // split
-        if (force) {
-          mergeSome(client, table, sizes, 2);
-        } else {
-          sizes.remove(0);
-        }
-      }
-    }
-    if (numToMerge == 0 && sizes.size() > 1 && last) {
-      // That's the last tablet, and we have a bunch to merge
-      mergeSome(client, table, sizes, sizes.size());
-    }
-    long result = 0;
-    for (Size s : sizes) {
-      result += s.size;
-    }
-    return result;
+  private long getTotalSize(List<Size> sizes) {
+    return sizes.stream().mapToLong(s -> s.size).sum();
   }
 
   protected void mergeSome(AccumuloClient client, String table, List<Size> sizes, int numToMerge)
@@ -241,8 +243,6 @@ public class Merge {
 
   protected Iterator<Size> getSizeIterator(AccumuloClient client, String tablename, Text start,
       Text end) throws MergeException {
-    // open up metadata, walk through the tablets.
-
     TableId tableId;
     TabletsMetadata tablets;
     try {
@@ -260,5 +260,4 @@ public class Merge {
       return new Size(tm.getExtent(), size);
     }).iterator();
   }
-
 }
