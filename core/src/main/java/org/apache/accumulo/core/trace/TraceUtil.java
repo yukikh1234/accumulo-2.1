@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.trace;
 
 import java.lang.reflect.InvocationHandler;
@@ -101,6 +102,12 @@ public class TraceUtil {
     }
     final String name = String.format(SPAN_FORMAT, caller.getSimpleName(), spanName);
     final SpanBuilder builder = getTracer(getOpenTelemetry()).spanBuilder(name);
+    configureSpanBuilder(builder, kind, attributes, tinfo);
+    return builder.startSpan();
+  }
+
+  private static void configureSpanBuilder(SpanBuilder builder, SpanKind kind,
+      Map<String,String> attributes, TInfo tinfo) {
     if (kind != null) {
       builder.setSpanKind(kind);
     }
@@ -110,66 +117,43 @@ public class TraceUtil {
     if (tinfo != null) {
       builder.setParent(getContext(tinfo));
     }
-    return builder.startSpan();
   }
 
-  /**
-   * Record that an Exception occurred in the code covered by a Span
-   *
-   * @param span the span
-   * @param e the exception
-   * @param rethrown whether the exception is subsequently re-thrown
-   */
   public static void setException(Span span, Throwable e, boolean rethrown) {
     if (enabled) {
       span.setStatus(StatusCode.ERROR);
-      span.recordException(e,
-          Attributes.builder().put(AttributeKey.stringKey("exception.type"), e.getClass().getName())
-              .put(AttributeKey.stringKey("exception.message"), e.getMessage())
-              .put(AttributeKey.booleanKey("exception.escaped"), rethrown).build());
+      recordExceptionOnSpan(span, e, rethrown);
     }
   }
 
-  /**
-   * Obtain {@link org.apache.accumulo.core.trace.thrift.TInfo} for the current context. This is
-   * used to send the current trace information to a remote process
-   */
+  private static void recordExceptionOnSpan(Span span, Throwable e, boolean rethrown) {
+    span.recordException(e,
+        Attributes.builder().put(AttributeKey.stringKey("exception.type"), e.getClass().getName())
+            .put(AttributeKey.stringKey("exception.message"), e.getMessage())
+            .put(AttributeKey.booleanKey("exception.escaped"), rethrown).build());
+  }
+
   public static TInfo traceInfo() {
     TInfo tinfo = new TInfo();
     W3CTraceContextPropagator.getInstance().inject(Context.current(), tinfo, TInfo::putToHeaders);
     return tinfo;
   }
 
-  /**
-   * Returns a newly created Context from the TInfo object sent by a remote process. The Context can
-   * then be used in this process to continue the tracing. The Context is used like:
-   *
-   * <pre>
-   * Context remoteCtx = getContext(tinfo);
-   * Span span = tracer.spanBuilder(name).setParent(remoteCtx).startSpan()
-   * </pre>
-   *
-   * @param tinfo tracing information serialized over Thrift
-   */
   private static Context getContext(TInfo tinfo) {
     return W3CTraceContextPropagator.getInstance().extract(Context.current(), tinfo,
-        new TextMapGetter<TInfo>() {
-          @Override
-          public Iterable<String> keys(TInfo carrier) {
-            if (carrier.getHeaders() == null) {
-              return null;
-            }
-            return carrier.getHeaders().keySet();
-          }
+        new TInfoTextMapGetter());
+  }
 
-          @Override
-          public String get(TInfo carrier, String key) {
-            if (carrier.getHeaders() == null) {
-              return null;
-            }
-            return carrier.getHeaders().get(key);
-          }
-        });
+  private static class TInfoTextMapGetter implements TextMapGetter<TInfo> {
+    @Override
+    public Iterable<String> keys(TInfo carrier) {
+      return carrier.getHeaders() != null ? carrier.getHeaders().keySet() : null;
+    }
+
+    @Override
+    public String get(TInfo carrier, String key) {
+      return carrier.getHeaders() != null ? carrier.getHeaders().get(key) : null;
+    }
   }
 
   public static Runnable wrap(Runnable r) {
@@ -189,26 +173,30 @@ public class TraceUtil {
   }
 
   public static <T> T wrapService(final T instance) {
-    InvocationHandler handler = (obj, method, args) -> {
+    return wrapRpc(createInvocationHandler(instance), instance);
+  }
+
+  private static <T> InvocationHandler createInvocationHandler(final T instance) {
+    return (obj, method, args) -> {
       if (args == null || args.length < 1 || args[0] == null || !(args[0] instanceof TInfo)) {
-        try {
-          return method.invoke(instance, args);
-        } catch (InvocationTargetException e) {
-          throw e.getCause();
-        }
-      }
-      Span span = startServerRpcSpan(instance.getClass(), method.getName(), (TInfo) args[0]);
-      try (Scope scope = span.makeCurrent()) {
         return method.invoke(instance, args);
-      } catch (Exception e) {
-        Throwable t = e instanceof InvocationTargetException ? e.getCause() : e;
-        setException(span, t, true);
-        throw t;
-      } finally {
-        span.end();
       }
+      return handleServiceMethod(instance, method, args);
     };
-    return wrapRpc(handler, instance);
+  }
+
+  private static <T> Object handleServiceMethod(final T instance, java.lang.reflect.Method method,
+      Object[] args) throws Throwable {
+    Span span = startServerRpcSpan(instance.getClass(), method.getName(), (TInfo) args[0]);
+    try (Scope scope = span.makeCurrent()) {
+      return method.invoke(instance, args);
+    } catch (Exception e) {
+      Throwable t = e instanceof InvocationTargetException ? e.getCause() : e;
+      setException(span, t, true);
+      throw t;
+    } finally {
+      span.end();
+    }
   }
 
   private static <T> T wrapRpc(final InvocationHandler handler, final T instance) {
@@ -217,5 +205,4 @@ public class TraceUtil {
         instance.getClass().getInterfaces(), handler);
     return proxiedInstance;
   }
-
 }
