@@ -16,26 +16,35 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import java.util.Base64;
 
 public class Encoding {
 
+  /**
+   * Encodes the provided byte array into a Base64 string suitable for use in file names. The method
+   * uses URL-safe encoding and trims trailing '=' characters for better readability.
+   *
+   * @param data the byte array to encode
+   * @return a Base64 encoded string with '=' characters removed
+   */
   public static String encodeAsBase64FileName(byte[] data) {
-    String encodedRow = Base64.getUrlEncoder().encodeToString(data);
+    // Encode the input data using Base64 URL-safe encoding
+    String encodedRow = Base64.getUrlEncoder().withoutPadding().encodeToString(data);
 
-    int index = encodedRow.length() - 1;
-    while (index >= 0 && encodedRow.charAt(index) == '=') {
-      index--;
-    }
-
-    encodedRow = encodedRow.substring(0, index + 1);
     return encodedRow;
   }
 
+  /**
+   * Decodes a Base64-encoded file name string back into a byte array.
+   *
+   * @param node the Base64 encoded string
+   * @return the decoded byte array
+   */
   public static byte[] decodeBase64FileName(String node) {
+    // Decode the Base64 URL-safe encoded string back to byte array
     return Base64.getUrlDecoder().decode(node);
   }
-
 }
