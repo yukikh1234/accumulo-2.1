@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.IOException;
@@ -70,12 +71,13 @@ public class DeletingIterator extends ServerWrappingIterator {
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
       throws IOException {
-    // do not want to seek to the middle of a row
     Range seekRange = IteratorUtil.maximizeStartKeyTimeStamp(range);
-
     source.seek(seekRange, columnFamilies, inclusive);
     findTop();
+    advanceToStartKey(range);
+  }
 
+  private void advanceToStartKey(Range range) throws IOException {
     if (range.getStartKey() != null) {
       while (source.hasTop() && source.getTopKey().compareTo(range.getStartKey(),
           PartialKey.ROW_COLFAM_COLQUAL_COLVIS_TIME) < 0) {
@@ -98,7 +100,6 @@ public class DeletingIterator extends ServerWrappingIterator {
 
   private void skipRowColumn() throws IOException {
     workKey.set(source.getTopKey());
-
     Key keyToSkip = workKey;
     source.next();
 
@@ -120,19 +121,24 @@ public class DeletingIterator extends ServerWrappingIterator {
       case PROCESS:
         return new DeletingIterator(source, propagateDeletes);
       case FAIL:
-        return new ServerWrappingIterator(source) {
-          @Override
-          public Key getTopKey() {
-            Key top = source.getTopKey();
-            if (top.isDeleted()) {
-              throw new IllegalStateException("Saw unexpected delete " + top);
-            }
-            return top;
-          }
-        };
+        return wrapWithFailBehavior(source);
       default:
         throw new IllegalArgumentException("Unknown behavior " + behavior);
     }
+  }
+
+  private static SortedKeyValueIterator<Key,Value>
+      wrapWithFailBehavior(SortedKeyValueIterator<Key,Value> source) {
+    return new ServerWrappingIterator(source) {
+      @Override
+      public Key getTopKey() {
+        Key top = source.getTopKey();
+        if (top.isDeleted()) {
+          throw new IllegalStateException("Saw unexpected delete " + top);
+        }
+        return top;
+      }
+    };
   }
 
   public static Behavior getBehavior(AccumuloConfiguration conf) {
