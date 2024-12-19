@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -33,41 +34,39 @@ public class ScanCacheProvider implements CacheProvider {
   public ScanCacheProvider(AccumuloConfiguration tableConfig, ScanDispatch dispatch,
       BlockCache indexCache, BlockCache dataCache) {
 
-    var loggingIndexCache = LoggingBlockCache.wrap(CacheType.INDEX, indexCache);
-    var loggingDataCache = LoggingBlockCache.wrap(CacheType.DATA, dataCache);
+    this.indexCache = configureIndexCache(tableConfig, dispatch, indexCache);
+    this.dataCache = configureDataCache(tableConfig, dispatch, dataCache);
+  }
 
+  private BlockCache configureIndexCache(AccumuloConfiguration tableConfig, ScanDispatch dispatch,
+      BlockCache indexCache) {
+    var loggingIndexCache = LoggingBlockCache.wrap(CacheType.INDEX, indexCache);
     switch (dispatch.getIndexCacheUsage()) {
       case ENABLED:
-        this.indexCache = loggingIndexCache;
-        break;
+        return loggingIndexCache;
       case DISABLED:
-        this.indexCache = null;
-        break;
+        return null;
       case OPPORTUNISTIC:
-        this.indexCache = new OpportunisticBlockCache(loggingIndexCache);
-        break;
+        return new OpportunisticBlockCache(loggingIndexCache);
       case TABLE:
-        this.indexCache =
-            tableConfig.getBoolean(Property.TABLE_INDEXCACHE_ENABLED) ? loggingIndexCache : null;
-        break;
+        return tableConfig.getBoolean(Property.TABLE_INDEXCACHE_ENABLED) ? loggingIndexCache : null;
       default:
         throw new IllegalStateException();
     }
+  }
 
+  private BlockCache configureDataCache(AccumuloConfiguration tableConfig, ScanDispatch dispatch,
+      BlockCache dataCache) {
+    var loggingDataCache = LoggingBlockCache.wrap(CacheType.DATA, dataCache);
     switch (dispatch.getDataCacheUsage()) {
       case ENABLED:
-        this.dataCache = loggingDataCache;
-        break;
+        return loggingDataCache;
       case DISABLED:
-        this.dataCache = null;
-        break;
+        return null;
       case OPPORTUNISTIC:
-        this.dataCache = new OpportunisticBlockCache(loggingDataCache);
-        break;
+        return new OpportunisticBlockCache(loggingDataCache);
       case TABLE:
-        this.dataCache =
-            tableConfig.getBoolean(Property.TABLE_BLOCKCACHE_ENABLED) ? loggingDataCache : null;
-        break;
+        return tableConfig.getBoolean(Property.TABLE_BLOCKCACHE_ENABLED) ? loggingDataCache : null;
       default:
         throw new IllegalStateException();
     }
