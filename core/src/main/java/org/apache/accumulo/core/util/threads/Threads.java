@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util.threads;
 
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -27,12 +28,15 @@ public class Threads {
 
   public static final UncaughtExceptionHandler UEH = new AccumuloUncaughtExceptionHandler();
 
+  private Threads() {
+    // private constructor to prevent instantiation
+  }
+
   public static class AccumuloDaemonThread extends Thread {
 
     public AccumuloDaemonThread(Runnable target, String name, UncaughtExceptionHandler ueh) {
       super(target, name);
-      setDaemon(true);
-      setUncaughtExceptionHandler(ueh);
+      initializeThread(ueh);
     }
 
     public AccumuloDaemonThread(String name) {
@@ -41,10 +45,13 @@ public class Threads {
 
     private AccumuloDaemonThread(String name, UncaughtExceptionHandler ueh) {
       super(name);
+      initializeThread(ueh);
+    }
+
+    private void initializeThread(UncaughtExceptionHandler ueh) {
       setDaemon(true);
       setUncaughtExceptionHandler(ueh);
     }
-
   }
 
   public static Runnable createNamedRunnable(String name, Runnable r) {
@@ -65,5 +72,4 @@ public class Threads {
     priority.ifPresent(thread::setPriority);
     return thread;
   }
-
 }
