@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -51,7 +52,8 @@ public class RunningCompactionInfo {
    */
   public RunningCompactionInfo(TExternalCompaction ec) {
     requireNonNull(ec, "Thrift external compaction is null.");
-    var updates = requireNonNull(ec.getUpdates(), "Missing Thrift external compaction updates");
+
+    var updates = parseUpdates(ec);
     var job = requireNonNull(ec.getJob(), "Thrift external compaction job is null");
 
     server = ec.getCompactor();
@@ -61,17 +63,12 @@ public class RunningCompactionInfo {
     tableId = KeyExtent.fromThrift(job.getExtent()).tableId().canonical();
     numFiles = job.getFiles().size();
 
-    // parse the updates map
     long nowMillis = System.currentTimeMillis();
-    float percent = 0f;
     long updateMillis;
     TCompactionStatusUpdate last;
 
-    // sort updates by key, which is a timestamp
-    TreeMap<Long,TCompactionStatusUpdate> sorted = new TreeMap<>(updates);
-    var lastEntry = sorted.lastEntry();
+    var lastEntry = getLastUpdateEntry(updates);
 
-    // last entry is all we care about so bail if null
     if (lastEntry != null) {
       last = lastEntry.getValue();
       updateMillis = lastEntry.getKey();
@@ -79,37 +76,53 @@ public class RunningCompactionInfo {
     } else {
       log.debug("No updates found for {}", ecid);
       lastUpdate = 1;
-      progress = percent;
+      progress = 0f;
       status = "na";
       duration = 0;
       return;
     }
-    long durationMinutes = NANOSECONDS.toMinutes(duration);
-    if (durationMinutes > 15) {
-      log.warn("Compaction {} has been running for {} minutes", ecid, durationMinutes);
-    }
+
+    checkDuration(duration, ecid);
 
     lastUpdate = nowMillis - updateMillis;
     long sinceLastUpdateSeconds = MILLISECONDS.toSeconds(lastUpdate);
     log.debug("Time since Last update {} - {} = {} seconds", nowMillis, updateMillis,
         sinceLastUpdateSeconds);
 
-    var total = last.getEntriesToBeCompacted();
-    if (total > 0) {
-      percent = (last.getEntriesRead() / (float) total) * 100;
-    }
-    progress = percent;
-
-    if (updates.isEmpty()) {
-      status = "na";
-    } else {
-      status = last.state.name();
-    }
+    progress = calculateProgress(last);
+    status = determineStatus(updates, last);
     log.debug("Parsed running compaction {} for {} with progress = {}%", status, ecid, progress);
     if (sinceLastUpdateSeconds > 30) {
       log.debug("Compaction hasn't progressed from {} in {} seconds.", progress,
           sinceLastUpdateSeconds);
     }
+  }
+
+  private TreeMap<Long,TCompactionStatusUpdate> parseUpdates(TExternalCompaction ec) {
+    return new TreeMap<>(
+        requireNonNull(ec.getUpdates(), "Missing Thrift external compaction updates"));
+  }
+
+  private java.util.Map.Entry<Long,TCompactionStatusUpdate>
+      getLastUpdateEntry(TreeMap<Long,TCompactionStatusUpdate> updates) {
+    return updates.lastEntry();
+  }
+
+  private void checkDuration(long duration, String ecid) {
+    long durationMinutes = NANOSECONDS.toMinutes(duration);
+    if (durationMinutes > 15) {
+      log.warn("Compaction {} has been running for {} minutes", ecid, durationMinutes);
+    }
+  }
+
+  private float calculateProgress(TCompactionStatusUpdate last) {
+    var total = last.getEntriesToBeCompacted();
+    return total > 0 ? (last.getEntriesRead() / (float) total) * 100 : 0f;
+  }
+
+  private String determineStatus(TreeMap<Long,TCompactionStatusUpdate> updates,
+      TCompactionStatusUpdate last) {
+    return updates.isEmpty() ? "na" : last.state.name();
   }
 
   @Override
