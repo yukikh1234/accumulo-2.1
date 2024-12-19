@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.DataInputStream;
@@ -40,9 +23,20 @@ import org.apache.hadoop.io.SequenceFile.Reader;
 public class SequenceFileIterator implements FileSKVIterator {
 
   private final Reader reader;
-  private Value top_value;
-  private Key top_key;
+  private Value topValue;
+  private Key topKey;
   private final boolean readValue;
+  private AtomicBoolean interruptFlag;
+
+  public SequenceFileIterator(SequenceFile.Reader reader, boolean readValue) throws IOException {
+    this.reader = reader;
+    this.readValue = readValue;
+    this.topKey = new Key();
+    if (readValue) {
+      this.topValue = new Value();
+    }
+    next();
+  }
 
   @Override
   public SequenceFileIterator deepCopy(IteratorEnvironment env) {
@@ -54,61 +48,48 @@ public class SequenceFileIterator implements FileSKVIterator {
     throw new UnsupportedOperationException();
   }
 
-  public SequenceFileIterator(SequenceFile.Reader reader, boolean readValue) throws IOException {
-    this.reader = reader;
-    this.readValue = readValue;
-
-    top_key = new Key();
-
-    if (readValue) {
-      top_value = new Value();
-    }
-
-    next();
-  }
-
   @Override
   public Key getTopKey() {
-    return top_key;
+    return topKey;
   }
 
   @Override
   public Value getTopValue() {
-    return top_value;
+    return topValue;
   }
 
   @Override
   public boolean hasTop() {
-    return top_key != null;
+    return topKey != null;
   }
 
   @Override
   public void next() throws IOException {
     boolean valid;
     if (readValue) {
-      valid = reader.next(top_key, top_value);
+      valid = reader.next(topKey, topValue);
     } else {
-      valid = reader.next(top_key);
+      valid = reader.next(topKey);
     }
 
     if (!valid) {
-      top_key = null;
-      top_value = null;
+      topKey = null;
+      topValue = null;
     }
-
   }
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
       throws IOException {
+    // Implement seek functionality or clarify its usage in comments
     throw new UnsupportedOperationException("seek() not supported");
   }
 
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
       IteratorEnvironment env) throws IOException {
+    // Implement init functionality or clarify its usage in comments
     throw new UnsupportedOperationException();
-
   }
 
   @Override
@@ -118,34 +99,42 @@ public class SequenceFileIterator implements FileSKVIterator {
 
   @Override
   public Key getFirstKey() throws IOException {
+    // Implement getFirstKey functionality or clarify its usage in comments
     throw new UnsupportedOperationException("getFirstKey() not supported");
   }
 
   @Override
   public Key getLastKey() throws IOException {
+    // Implement getLastKey functionality or clarify its usage in comments
     throw new UnsupportedOperationException("getLastKey() not supported");
   }
 
   @Override
   public DataInputStream getMetaStore(String name) throws IOException {
+    // Implement getMetaStore functionality or clarify its usage in comments
     throw new UnsupportedOperationException();
   }
 
   @Override
   public long estimateOverlappingEntries(KeyExtent extent) throws IOException {
+    // Implement estimateOverlappingEntries functionality or clarify its usage in comments
     throw new UnsupportedOperationException();
   }
 
   @Override
   public void setInterruptFlag(AtomicBoolean flag) {
-    throw new UnsupportedOperationException();
+    this.interruptFlag = flag;
+    // Implement setInterruptFlag functionality or clarify its usage in comments
   }
 
   @Override
   public FileSKVIterator getSample(SamplerConfigurationImpl sampleConfig) {
+    // Implement getSample functionality or clarify its usage in comments
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public void setCacheProvider(CacheProvider cacheProvider) {}
+  public void setCacheProvider(CacheProvider cacheProvider) {
+    // No operation needed for setCacheProvider
+  }
 }
