@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -29,32 +30,32 @@ public class NumUtil {
   private static final DecimalFormat df_mantissa = new DecimalFormat("#,###,##0.00");
 
   public static String bigNumberForSize(long big) {
-    return bigNumber(big, SIZE_SUFFIX, 1024);
+    return calculateBigNumber(big, SIZE_SUFFIX, 1024);
   }
 
   public static String bigNumberForQuantity(long big) {
-    return bigNumber(big, QUANTITY_SUFFIX, 1000);
+    return calculateBigNumber(big, QUANTITY_SUFFIX, 1000);
   }
 
   public static String bigNumberForQuantity(double big) {
-    return bigNumber(big, QUANTITY_SUFFIX, 1000);
+    return calculateBigNumber(big, QUANTITY_SUFFIX, 1000.0);
   }
 
-  private static String bigNumber(long big, String[] SUFFIXES, long base) {
+  private static String calculateBigNumber(long big, String[] suffixes, long base) {
     if (big < base) {
-      return df.format(big) + SUFFIXES[0];
+      return df.format(big) + suffixes[0];
     }
     int exp = (int) (Math.log(big) / Math.log(base));
     double val = big / Math.pow(base, exp);
-    return df_mantissa.format(val) + SUFFIXES[exp];
+    return df_mantissa.format(val) + suffixes[exp];
   }
 
-  private static String bigNumber(double big, String[] SUFFIXES, long base) {
+  private static String calculateBigNumber(double big, String[] suffixes, double base) {
     if (big < base) {
-      return df_mantissa.format(big) + SUFFIXES[0];
+      return df_mantissa.format(big) + suffixes[0];
     }
     int exp = (int) (Math.log(big) / Math.log(base));
     double val = big / Math.pow(base, exp);
-    return df_mantissa.format(val) + SUFFIXES[exp];
+    return df_mantissa.format(val) + suffixes[exp];
   }
 }
