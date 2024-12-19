@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -36,14 +19,6 @@ import org.apache.hadoop.io.Text;
 
 import com.google.common.util.concurrent.AtomicLongMap;
 
-/**
- * This class provides visibility metrics per locality group. The Map in getMetrics() maps the
- * locality group name to an ArrayList of VisibilityMetric objects. These contain the components of
- * a visibility metric; the visibility as a String, the number of times that is seen in a locality
- * group, the percentage of keys that contain that visibility in the locality group, the number of
- * blocks in the locality group that contain the visibility, and the percentage of blocks in the
- * locality group that contain the visibility.
- */
 public class VisMetricsGatherer
     implements MetricsGatherer<Map<String,ArrayList<VisibilityMetric>>> {
   private static final String KEY_HASH_ALGORITHM = "SHA-256";
@@ -74,16 +49,7 @@ public class VisMetricsGatherer
 
   @Override
   public void startLocalityGroup(Text oneCF) {
-    String name = null;
-    ByteSequence cf = new ArrayByteSequence(oneCF.toString());
-    for (Entry<String,ArrayList<ByteSequence>> entry : localityGroupCF.entrySet()) {
-      if (entry.getValue().contains(cf)) {
-        if (entry.getKey() != null) {
-          name = entry.getKey().toString();
-        }
-        break;
-      }
-    }
+    String name = determineLocalityGroupName(oneCF);
     localityGroups.add(name);
     metric.put(name, AtomicLongMap.create(new HashMap<>()));
     blocks.put(name, AtomicLongMap.create(new HashMap<>()));
@@ -92,26 +58,36 @@ public class VisMetricsGatherer
     numBlocks.add(0);
   }
 
+  private String determineLocalityGroupName(Text oneCF) {
+    ByteSequence cf = new ArrayByteSequence(oneCF.toString());
+    for (Entry<String,ArrayList<ByteSequence>> entry : localityGroupCF.entrySet()) {
+      if (entry.getValue().contains(cf)) {
+        return entry.getKey();
+      }
+    }
+    return null;
+  }
+
   @Override
   public void addMetric(Key key, Value val) {
     String myMetric = key.getColumnVisibility().toString();
     String currLG = localityGroups.get(numLG - 1);
-    if (metric.get(currLG).containsKey(myMetric)) {
-      metric.get(currLG).getAndIncrement(myMetric);
-    } else {
-      metric.get(currLG).put(myMetric, 1);
-    }
-
+    incrementMetric(currLG, myMetric);
     numEntries.set(numLG - 1, numEntries.get(numLG - 1) + 1);
+    updateBlocks(currLG, myMetric);
+  }
 
-    if (!inBlock.contains(myMetric) && blocks.get(currLG).containsKey(myMetric)) {
-      blocks.get(currLG).incrementAndGet(myMetric);
-      inBlock.add(myMetric);
-    } else if (!inBlock.contains(myMetric) && !blocks.get(currLG).containsKey(myMetric)) {
-      blocks.get(currLG).put(myMetric, 1);
+  private void incrementMetric(String currLG, String myMetric) {
+    AtomicLongMap<String> lgMetrics = metric.get(currLG);
+    lgMetrics.getAndIncrement(myMetric);
+  }
+
+  private void updateBlocks(String currLG, String myMetric) {
+    if (!inBlock.contains(myMetric)) {
+      AtomicLongMap<String> lgBlocks = blocks.get(currLG);
+      lgBlocks.getAndIncrement(myMetric);
       inBlock.add(myMetric);
     }
-
   }
 
   @Override
@@ -123,65 +99,72 @@ public class VisMetricsGatherer
   @Override
   public void printMetrics(boolean hash, String metricWord, PrintStream out) {
     for (int i = 0; i < numLG; i++) {
-      String lGName = localityGroups.get(i);
-      out.print("Locality Group: ");
-      if (lGName == null) {
-        out.println("<DEFAULT>");
-      } else {
-        out.println(localityGroups.get(i));
-      }
-      out.printf("%-27s", metricWord);
-      out.println("Number of keys\t   Percent of keys\tNumber of blocks\tPercent of blocks");
-      for (Entry<String,Long> entry : metric.get(lGName).asMap().entrySet()) {
-        if (hash) {
-          String encodedKey = "";
-          try {
-            byte[] encodedBytes = MessageDigest.getInstance(KEY_HASH_ALGORITHM)
-                .digest(entry.getKey().getBytes(UTF_8));
-            encodedKey = new String(encodedBytes, UTF_8);
-          } catch (NoSuchAlgorithmException e) {
-            out.println(
-                "Failed to convert key to " + KEY_HASH_ALGORITHM + " hash: " + e.getMessage());
-          }
-          out.printf("%-20s", encodedKey.substring(0, 8));
-        } else {
-          out.printf("%-20s", entry.getKey());
-        }
-        out.print("\t\t" + entry.getValue() + "\t\t\t");
-        out.printf("%.2f", ((double) entry.getValue() / numEntries.get(i)) * 100);
-        out.print("%\t\t\t");
-
-        long blocksIn = blocks.get(lGName).get(entry.getKey());
-
-        out.print(blocksIn + "\t\t   ");
-        out.printf("%.2f", ((double) blocksIn / numBlocks.get(i)) * 100);
-        out.print("%");
-
-        out.println("");
-      }
-      out.println("Number of keys: " + numEntries.get(i));
-      out.println();
+      printLocalityGroupMetrics(hash, metricWord, out, i);
     }
+  }
+
+  private void printLocalityGroupMetrics(boolean hash, String metricWord, PrintStream out, int i) {
+    String lGName = localityGroups.get(i);
+    out.print("Locality Group: ");
+    out.println(lGName == null ? "<DEFAULT>" : lGName);
+    out.printf("%-27s", metricWord);
+    out.println("Number of keys\t   Percent of keys\tNumber of blocks\tPercent of blocks");
+
+    for (Entry<String,Long> entry : metric.get(lGName).asMap().entrySet()) {
+      printMetricDetails(hash, out, i, entry, lGName);
+    }
+
+    out.println("Number of keys: " + numEntries.get(i));
+    out.println();
+  }
+
+  private void printMetricDetails(boolean hash, PrintStream out, int i, Entry<String,Long> entry,
+      String lGName) {
+    String metricKey = hash ? hashKey(entry.getKey()) : entry.getKey();
+    out.printf("%-20s", metricKey);
+    out.printf("\t\t%d\t\t\t%.2f%%\t\t\t%d\t\t   %.2f%%\n", entry.getValue(),
+        calculatePercentage(entry.getValue(), numEntries.get(i)),
+        blocks.get(lGName).get(entry.getKey()),
+        calculatePercentage(blocks.get(lGName).get(entry.getKey()), numBlocks.get(i)));
+  }
+
+  private String hashKey(String key) {
+    try {
+      byte[] encodedBytes =
+          MessageDigest.getInstance(KEY_HASH_ALGORITHM).digest(key.getBytes(UTF_8));
+      return new String(encodedBytes, UTF_8).substring(0, 8);
+    } catch (NoSuchAlgorithmException e) {
+      return "HASH_ERR";
+    }
+  }
+
+  private double calculatePercentage(long part, long total) {
+    return ((double) part / total) * 100;
   }
 
   @Override
   public Map<String,ArrayList<VisibilityMetric>> getMetrics() {
     Map<String,ArrayList<VisibilityMetric>> getMetrics = new HashMap<>();
     for (int i = 0; i < numLG; i++) {
-      String lGName = localityGroups.get(i);
-      ArrayList<VisibilityMetric> rows = new ArrayList<>();
-      for (Entry<String,Long> entry : metric.get(lGName).asMap().entrySet()) {
-        long vis = entry.getValue();
-        double visPer = ((double) entry.getValue() / numEntries.get(i)) * 100;
-
-        long blocksIn = blocks.get(lGName).get(entry.getKey());
-        double blocksPer = ((double) blocksIn / numBlocks.get(i)) * 100;
-
-        rows.add(new VisibilityMetric(entry.getKey(), vis, visPer, blocksIn, blocksPer));
-      }
-      getMetrics.put(lGName, rows);
+      addVisibilityMetrics(getMetrics, i);
     }
     return getMetrics;
   }
 
+  private void addVisibilityMetrics(Map<String,ArrayList<VisibilityMetric>> getMetrics, int i) {
+    String lGName = localityGroups.get(i);
+    ArrayList<VisibilityMetric> rows = new ArrayList<>();
+    for (Entry<String,Long> entry : metric.get(lGName).asMap().entrySet()) {
+      rows.add(createVisibilityMetric(entry, i, lGName));
+    }
+    getMetrics.put(lGName, rows);
+  }
+
+  private VisibilityMetric createVisibilityMetric(Entry<String,Long> entry, int i, String lGName) {
+    long vis = entry.getValue();
+    double visPer = calculatePercentage(vis, numEntries.get(i));
+    long blocksIn = blocks.get(lGName).get(entry.getKey());
+    double blocksPer = calculatePercentage(blocksIn, numBlocks.get(i));
+    return new VisibilityMetric(entry.getKey(), vis, visPer, blocksIn, blocksPer);
+  }
 }
