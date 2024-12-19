@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,12 +33,12 @@ public class BasicCacheProvider implements CacheProvider {
 
   @Override
   public BlockCache getDataCache() {
-    return dataCache;
+    return this.dataCache;
   }
 
   @Override
   public BlockCache getIndexCache() {
-    return indexCache;
+    return this.indexCache;
   }
 
 }
