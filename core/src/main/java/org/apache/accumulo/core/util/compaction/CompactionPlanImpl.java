@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -70,19 +71,36 @@ public class CompactionPlanImpl implements CompactionPlan {
     @Override
     public Builder addJob(short priority, CompactionExecutorId executor,
         Collection<CompactableFile> files) {
-      Set<CompactableFile> filesSet =
-          files instanceof Set ? (Set<CompactableFile>) files : Set.copyOf(files);
+      Set<CompactableFile> filesSet = toSet(files);
 
-      Preconditions.checkArgument(Collections.disjoint(filesSet, seenFiles),
-          "Job files overlaps with previous job %s %s", files, jobs);
-      Preconditions.checkArgument(candidates.containsAll(filesSet),
-          "Job files are not compaction candidates %s %s", files, candidates);
+      validateNoOverlap(filesSet, seenFiles);
+      validateCandidatesContainAll(filesSet, candidates);
 
       seenFiles.addAll(filesSet);
 
-      jobs.add(new CompactionJobImpl(priority, executor, filesSet, kind,
-          Optional.of(filesSet.equals(allFiles))));
+      jobs.add(createCompactionJob(priority, executor, filesSet));
       return this;
+    }
+
+    private Set<CompactableFile> toSet(Collection<CompactableFile> files) {
+      return files instanceof Set ? (Set<CompactableFile>) files : Set.copyOf(files);
+    }
+
+    private void validateNoOverlap(Set<CompactableFile> filesSet, Set<CompactableFile> seenFiles) {
+      Preconditions.checkArgument(Collections.disjoint(filesSet, seenFiles),
+          "Job files overlaps with previous job %s %s", filesSet, jobs);
+    }
+
+    private void validateCandidatesContainAll(Set<CompactableFile> filesSet,
+        Set<CompactableFile> candidates) {
+      Preconditions.checkArgument(candidates.containsAll(filesSet),
+          "Job files are not compaction candidates %s %s", filesSet, candidates);
+    }
+
+    private CompactionJob createCompactionJob(short priority, CompactionExecutorId executor,
+        Set<CompactableFile> filesSet) {
+      return new CompactionJobImpl(priority, executor, filesSet, kind,
+          Optional.of(filesSet.equals(allFiles)));
     }
 
     @Override
