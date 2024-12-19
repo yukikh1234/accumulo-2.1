@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,27 +37,27 @@ import org.apache.accumulo.core.data.TableId;
 import org.apache.hadoop.io.Text;
 
 public class ByteBufferUtil {
+
   public static byte[] toBytes(ByteBuffer buffer) {
     if (buffer == null) {
       return null;
     }
-    if (buffer.hasArray()) {
-      // did not use buffer.get() because it changes the position
-      return Arrays.copyOfRange(buffer.array(), buffer.position() + buffer.arrayOffset(),
-          buffer.limit() + buffer.arrayOffset());
-    } else {
-      byte[] data = new byte[buffer.remaining()];
-      // duplicate inorder to avoid changing position
-      buffer.duplicate().get(data);
-      return data;
-    }
+    return buffer.hasArray() ? Arrays.copyOfRange(buffer.array(),
+        buffer.position() + buffer.arrayOffset(), buffer.limit() + buffer.arrayOffset())
+        : toBytesFromBuffer(buffer);
+  }
+
+  private static byte[] toBytesFromBuffer(ByteBuffer buffer) {
+    byte[] data = new byte[buffer.remaining()];
+    buffer.duplicate().get(data);
+    return data;
   }
 
   public static List<ByteBuffer> toByteBuffers(Collection<byte[]> bytesList) {
     if (bytesList == null) {
       return null;
     }
-    ArrayList<ByteBuffer> result = new ArrayList<>();
+    List<ByteBuffer> result = new ArrayList<>(bytesList.size());
     for (byte[] bytes : bytesList) {
       result.add(ByteBuffer.wrap(bytes));
     }
@@ -67,7 +68,7 @@ public class ByteBufferUtil {
     if (bytesList == null) {
       return null;
     }
-    ArrayList<byte[]> result = new ArrayList<>(bytesList.size());
+    List<byte[]> result = new ArrayList<>(bytesList.size());
     for (ByteBuffer bytes : bytesList) {
       result.add(toBytes(bytes));
     }
@@ -89,24 +90,19 @@ public class ByteBufferUtil {
     if (byteBuffer == null) {
       return null;
     }
+    return byteBuffer.hasArray() ? toTextFromArray(byteBuffer) : new Text(toBytes(byteBuffer));
+  }
 
-    if (byteBuffer.hasArray()) {
-      Text result = new Text();
-      result.set(byteBuffer.array(), byteBuffer.arrayOffset() + byteBuffer.position(),
-          byteBuffer.remaining());
-      return result;
-    } else {
-      return new Text(toBytes(byteBuffer));
-    }
+  private static Text toTextFromArray(ByteBuffer byteBuffer) {
+    Text result = new Text();
+    result.set(byteBuffer.array(), byteBuffer.arrayOffset() + byteBuffer.position(),
+        byteBuffer.remaining());
+    return result;
   }
 
   public static String toString(ByteBuffer bytes) {
-    if (bytes.hasArray()) {
-      return new String(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining(),
-          UTF_8);
-    } else {
-      return new String(toBytes(bytes), UTF_8);
-    }
+    return bytes.hasArray() ? new String(bytes.array(), bytes.arrayOffset() + bytes.position(),
+        bytes.remaining(), UTF_8) : new String(toBytes(bytes), UTF_8);
   }
 
   public static TableId toTableId(ByteBuffer bytes) {
@@ -117,12 +113,8 @@ public class ByteBufferUtil {
     if (bs == null) {
       return null;
     }
-
-    if (bs.isBackedByArray()) {
-      return ByteBuffer.wrap(bs.getBackingArray(), bs.offset(), bs.length());
-    } else {
-      return ByteBuffer.wrap(bs.toArray());
-    }
+    return bs.isBackedByArray() ? ByteBuffer.wrap(bs.getBackingArray(), bs.offset(), bs.length())
+        : ByteBuffer.wrap(bs.toArray());
   }
 
   public static void write(DataOutput out, ByteBuffer buffer) throws IOException {
@@ -134,11 +126,8 @@ public class ByteBufferUtil {
   }
 
   public static ByteArrayInputStream toByteArrayInputStream(ByteBuffer buffer) {
-    if (buffer.hasArray()) {
-      return new ByteArrayInputStream(buffer.array(), buffer.arrayOffset() + buffer.position(),
-          buffer.remaining());
-    } else {
-      return new ByteArrayInputStream(toBytes(buffer));
-    }
+    return buffer.hasArray() ? new ByteArrayInputStream(buffer.array(),
+        buffer.arrayOffset() + buffer.position(), buffer.remaining())
+        : new ByteArrayInputStream(toBytes(buffer));
   }
 }
