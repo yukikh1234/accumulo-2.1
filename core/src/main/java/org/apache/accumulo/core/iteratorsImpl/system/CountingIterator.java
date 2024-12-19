@@ -16,10 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.IOException;
-import java.util.Map;
 
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Value;
@@ -46,11 +46,8 @@ public class CountingIterator extends WrappingIterator {
     count = 0;
   }
 
-  @Override
-  public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
-      IteratorEnvironment env) {
-    throw new UnsupportedOperationException();
-  }
+  // Removed the init method as suggested
+  // The init method is not needed and does not provide a meaningful implementation
 
   @Override
   public void next() throws IOException {
