@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -25,27 +26,56 @@ import com.google.common.base.Preconditions;
 
 public class CompactionExecutorIdImpl extends CompactionExecutorId {
 
+  private static final long serialVersionUID = 1L;
+
+  /**
+   * Constructs a new CompactionExecutorIdImpl with the given canonical name.
+   *
+   * @param canonical the canonical name of the compaction executor
+   */
   protected CompactionExecutorIdImpl(String canonical) {
     super(canonical);
   }
 
-  private static final long serialVersionUID = 1L;
-
+  /**
+   * Checks if the current executor ID is external.
+   *
+   * @return true if the ID starts with "e.", false otherwise
+   */
   public boolean isExternalId() {
     return canonical().startsWith("e.");
   }
 
+  /**
+   * Retrieves the external name of the executor. Preconditions: The ID must be external (i.e.,
+   * {@link #isExternalId()} returns true).
+   *
+   * @return the external name of the executor
+   * @throws IllegalStateException if the ID is not external
+   */
   public String getExternalName() {
-    Preconditions.checkState(isExternalId());
-    return canonical().substring("e.".length());
+    Preconditions.checkState(isExternalId(), "The ID is not external.");
+    return canonical().substring(2); // "e.".length() is 2
   }
 
+  /**
+   * Creates an internal compaction executor ID.
+   *
+   * @param csid the compaction service ID
+   * @param executorName the name of the executor
+   * @return a new CompactionExecutorId representing an internal executor
+   */
   public static CompactionExecutorId internalId(CompactionServiceId csid, String executorName) {
     return new CompactionExecutorIdImpl("i." + csid + "." + executorName);
   }
 
+  /**
+   * Creates an external compaction executor ID.
+   *
+   * @param executorName the name of the executor
+   * @return a new CompactionExecutorId representing an external executor
+   */
   public static CompactionExecutorId externalId(String executorName) {
     return new CompactionExecutorIdImpl("e." + executorName);
   }
-
 }
