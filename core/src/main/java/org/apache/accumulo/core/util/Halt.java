@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -29,41 +30,39 @@ public class Halt {
   private static final Logger log = LoggerFactory.getLogger(Halt.class);
 
   public static void halt(final String msg) {
-    // ACCUMULO-3651 Changed level to error and added FATAL to message for slf4j compatibility
-    halt(0, new Runnable() {
-      @Override
-      public void run() {
-        log.error("FATAL {}", msg);
-      }
-    });
+    Runnable logRunnable = createLogRunnable(msg);
+    halt(0, logRunnable);
   }
 
   public static void halt(final String msg, int status) {
-    halt(status, new Runnable() {
-      @Override
-      public void run() {
-        log.error("FATAL {}", msg);
-      }
-    });
+    Runnable logRunnable = createLogRunnable(msg);
+    halt(status, logRunnable);
+  }
+
+  private static Runnable createLogRunnable(final String msg) {
+    return () -> log.error("FATAL {}", msg);
   }
 
   public static void halt(final int status, Runnable runnable) {
+    executeRunnable(runnable);
+    initiateHalt(status);
+  }
 
+  private static void executeRunnable(Runnable runnable) {
+    if (runnable != null) {
+      runnable.run();
+    }
+  }
+
+  private static void initiateHalt(int status) {
     try {
-      // give ourselves a little time to try and do something
       Threads.createThread("Halt Thread", () -> {
         sleepUninterruptibly(100, MILLISECONDS);
         Runtime.getRuntime().halt(status);
       }).start();
-
-      if (runnable != null) {
-        runnable.run();
-      }
       Runtime.getRuntime().halt(status);
     } finally {
-      // In case something else decides to throw a Runtime exception
       Runtime.getRuntime().halt(-1);
     }
   }
-
 }
