@@ -1,28 +1,10 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.blockfile.cache.lru;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -52,37 +34,34 @@ public abstract class SynchronousLoadingBlockCache implements BlockCache {
   }
 
   private Map<String,byte[]> resolveDependencies(Map<String,Loader> loaderDeps) {
-    Map<String,byte[]> depData;
-
-    switch (loaderDeps.size()) {
-      case 0:
-        depData = Collections.emptyMap();
-        break;
-      case 1: {
-        Entry<String,Loader> entry = loaderDeps.entrySet().iterator().next();
-        CacheEntry dce = getBlock(entry.getKey(), entry.getValue());
-        if (dce == null) {
-          depData = null;
-        } else {
-          depData = Collections.singletonMap(entry.getKey(), dce.getBuffer());
-        }
-        break;
-      }
-      default:
-        depData = new HashMap<>();
-        Set<Entry<String,Loader>> es = loaderDeps.entrySet();
-        for (Entry<String,Loader> entry : es) {
-          CacheEntry dce = getBlock(entry.getKey(), entry.getValue());
-          if (dce == null) {
-            depData = null;
-            break;
-          }
-
-          depData.put(entry.getKey(), dce.getBuffer());
-        }
-        break;
+    if (loaderDeps.isEmpty()) {
+      return Collections.emptyMap();
+    } else if (loaderDeps.size() == 1) {
+      return resolveSingleDependency(loaderDeps);
+    } else {
+      return resolveMultipleDependencies(loaderDeps);
     }
+  }
 
+  private Map<String,byte[]> resolveSingleDependency(Map<String,Loader> loaderDeps) {
+    Entry<String,Loader> entry = loaderDeps.entrySet().iterator().next();
+    CacheEntry dce = getBlock(entry.getKey(), entry.getValue());
+    if (dce == null) {
+      return null;
+    } else {
+      return Collections.singletonMap(entry.getKey(), dce.getBuffer());
+    }
+  }
+
+  private Map<String,byte[]> resolveMultipleDependencies(Map<String,Loader> loaderDeps) {
+    Map<String,byte[]> depData = new HashMap<>();
+    for (Entry<String,Loader> entry : loaderDeps.entrySet()) {
+      CacheEntry dce = getBlock(entry.getKey(), entry.getValue());
+      if (dce == null) {
+        return null;
+      }
+      depData.put(entry.getKey(), dce.getBuffer());
+    }
     return depData;
   }
 
@@ -98,13 +77,11 @@ public abstract class SynchronousLoadingBlockCache implements BlockCache {
 
   @Override
   public CacheEntry getBlock(String blockName, Loader loader) {
-
     CacheEntry ce = getBlock(blockName);
     if (ce != null) {
       return ce;
     }
 
-    // intentionally done before getting lock
     Map<String,byte[]> depData = resolveDependencies(loader.getDependencies());
     if (depData == null) {
       return null;
@@ -115,24 +92,23 @@ public abstract class SynchronousLoadingBlockCache implements BlockCache {
 
     loadLock.lock();
     try {
-
-      // check again after getting lock, could have loaded while waiting on lock
-      ce = getBlockNoStats(blockName);
-      if (ce != null) {
-        return ce;
-      }
-
-      // not in cache so load data
-      byte[] data = loader.load(getMaxEntrySize(), depData);
-      if (data == null) {
-        return null;
-      }
-
-      // attempt to add data to cache
-      return cacheBlock(blockName, data);
+      return performLoading(blockName, loader, depData);
     } finally {
       loadLock.unlock();
     }
   }
 
+  private CacheEntry performLoading(String blockName, Loader loader, Map<String,byte[]> depData) {
+    CacheEntry ce = getBlockNoStats(blockName);
+    if (ce != null) {
+      return ce;
+    }
+
+    byte[] data = loader.load(getMaxEntrySize(), depData);
+    if (data == null) {
+      return null;
+    }
+
+    return cacheBlock(blockName, data);
+  }
 }
