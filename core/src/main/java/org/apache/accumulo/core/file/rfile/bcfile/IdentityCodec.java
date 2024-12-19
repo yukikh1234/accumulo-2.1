@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile.bcfile;
 
 import java.io.IOException;
@@ -31,22 +14,24 @@ import org.apache.hadoop.io.compress.Decompressor;
 
 public class IdentityCodec implements CompressionCodec {
 
-  /*
-   * Copied from org/apache/hadoop/io/compress/FakeCompressor.java
-   */
   public static class IdentityCompressor implements Compressor {
 
     private boolean finish;
     private boolean finished;
     private int nread;
     private int nwrite;
-
     private byte[] userBuf;
     private int userBufOff;
     private int userBufLen;
 
     @Override
     public int compress(byte[] b, int off, int len) throws IOException {
+      int n = copyData(b, off, len);
+      updateStateAfterCompress(n);
+      return n;
+    }
+
+    private int copyData(byte[] b, int off, int len) {
       int n = Math.min(len, userBufLen);
       if (userBuf != null && b != null) {
         System.arraycopy(userBuf, userBufOff, b, off, n);
@@ -54,18 +39,17 @@ public class IdentityCodec implements CompressionCodec {
       userBufOff += n;
       userBufLen -= n;
       nwrite += n;
-
-      if (finish && userBufLen <= 0) {
-        finished = true;
-      }
-
       return n;
     }
 
-    @Override
-    public void end() {
-      // nop
+    private void updateStateAfterCompress(int n) {
+      if (finish && userBufLen <= 0) {
+        finished = true;
+      }
     }
+
+    @Override
+    public void end() {}
 
     @Override
     public void finish() {
@@ -94,6 +78,10 @@ public class IdentityCodec implements CompressionCodec {
 
     @Override
     public void reset() {
+      resetState();
+    }
+
+    private void resetState() {
       finish = false;
       finished = false;
       nread = 0;
@@ -104,41 +92,46 @@ public class IdentityCodec implements CompressionCodec {
     }
 
     @Override
-    public void setDictionary(byte[] b, int off, int len) {
-      // nop
-    }
+    public void setDictionary(byte[] b, int off, int len) {}
 
     @Override
     public void setInput(byte[] b, int off, int len) {
+      validateInput(b, off, len);
       nread += len;
       userBuf = b;
       userBufOff = off;
       userBufLen = len;
     }
 
-    @Override
-    public void reinit(Configuration conf) {
-      // nop
+    private void validateInput(byte[] b, int off, int len) {
+      if (b == null || off < 0 || len < 0 || off + len > b.length) {
+        throw new IllegalArgumentException("Invalid input parameters");
+      }
     }
+
+    @Override
+    public void reinit(Configuration conf) {}
 
   }
 
-  /*
-   * Copied from org/apache/hadoop/io/compress/FakeDecompressor.java
-   */
   public static class IdentityDecompressor implements Decompressor {
 
     private boolean finish;
     private boolean finished;
     private int nread;
     private int nwrite;
-
     private byte[] userBuf;
     private int userBufOff;
     private int userBufLen;
 
     @Override
     public int decompress(byte[] b, int off, int len) throws IOException {
+      int n = copyData(b, off, len);
+      updateStateAfterDecompress(n);
+      return n;
+    }
+
+    private int copyData(byte[] b, int off, int len) {
       int n = Math.min(len, userBufLen);
       if (userBuf != null && b != null) {
         System.arraycopy(userBuf, userBufOff, b, off, n);
@@ -146,18 +139,17 @@ public class IdentityCodec implements CompressionCodec {
       userBufOff += n;
       userBufLen -= n;
       nwrite += n;
-
-      if (finish && userBufLen <= 0) {
-        finished = true;
-      }
-
       return n;
     }
 
-    @Override
-    public void end() {
-      // nop
+    private void updateStateAfterDecompress(int n) {
+      if (finish && userBufLen <= 0) {
+        finished = true;
+      }
     }
+
+    @Override
+    public void end() {}
 
     @Override
     public boolean finished() {
@@ -184,6 +176,10 @@ public class IdentityCodec implements CompressionCodec {
 
     @Override
     public void reset() {
+      resetState();
+    }
+
+    private void resetState() {
       finish = false;
       finished = false;
       nread = 0;
@@ -194,16 +190,21 @@ public class IdentityCodec implements CompressionCodec {
     }
 
     @Override
-    public void setDictionary(byte[] b, int off, int len) {
-      // nop
-    }
+    public void setDictionary(byte[] b, int off, int len) {}
 
     @Override
     public void setInput(byte[] b, int off, int len) {
+      validateInput(b, off, len);
       nread += len;
       userBuf = b;
       userBufOff = off;
       userBufLen = len;
+    }
+
+    private void validateInput(byte[] b, int off, int len) {
+      if (b == null || off < 0 || len < 0 || off + len > b.length) {
+        throw new IllegalArgumentException("Invalid input parameters");
+      }
     }
 
     @Override
