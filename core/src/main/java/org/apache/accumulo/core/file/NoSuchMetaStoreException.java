@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -22,14 +23,13 @@ import java.io.IOException;
 
 public class NoSuchMetaStoreException extends IOException {
 
+  private static final long serialVersionUID = 1L;
+
   public NoSuchMetaStoreException(String msg, Throwable e) {
     super(msg, e);
   }
 
   public NoSuchMetaStoreException(String msg) {
-    super(msg);
+    this(msg, null);
   }
-
-  private static final long serialVersionUID = 1L;
-
 }
