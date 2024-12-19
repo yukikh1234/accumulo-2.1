@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util.compaction;
 
 import java.util.HashMap;
@@ -65,27 +66,7 @@ public class CompactionPlannerInitParams implements CompactionPlanner.InitParame
 
   @Override
   public ExecutorManager getExecutorManager() {
-    return new ExecutorManager() {
-      @Override
-      public CompactionExecutorId createExecutor(String executorName, int threads) {
-        Preconditions.checkArgument(threads > 0, "Positive number of threads required : %s",
-            threads);
-        var ceid = CompactionExecutorIdImpl.internalId(serviceId, executorName);
-        Preconditions.checkState(!getRequestedExecutors().containsKey(ceid),
-            "Duplicate Compaction Executor ID found");
-        getRequestedExecutors().put(ceid, threads);
-        return ceid;
-      }
-
-      @Override
-      public CompactionExecutorId getExternalExecutor(String name) {
-        var ceid = CompactionExecutorIdImpl.externalId(name);
-        Preconditions.checkArgument(!getRequestedExternalExecutors().contains(ceid),
-            "Duplicate external executor for queue " + name);
-        getRequestedExternalExecutors().add(ceid);
-        return ceid;
-      }
-    };
+    return new ExecutorManagerImpl();
   }
 
   public Map<CompactionExecutorId,Integer> getRequestedExecutors() {
@@ -94,5 +75,26 @@ public class CompactionPlannerInitParams implements CompactionPlanner.InitParame
 
   public Set<CompactionExecutorId> getRequestedExternalExecutors() {
     return requestedExternalExecutors;
+  }
+
+  private class ExecutorManagerImpl implements ExecutorManager {
+    @Override
+    public CompactionExecutorId createExecutor(String executorName, int threads) {
+      Preconditions.checkArgument(threads > 0, "Positive number of threads required : %s", threads);
+      var ceid = CompactionExecutorIdImpl.internalId(serviceId, executorName);
+      Preconditions.checkState(!requestedExecutors.containsKey(ceid),
+          "Duplicate Compaction Executor ID found");
+      requestedExecutors.put(ceid, threads);
+      return ceid;
+    }
+
+    @Override
+    public CompactionExecutorId getExternalExecutor(String name) {
+      var ceid = CompactionExecutorIdImpl.externalId(name);
+      Preconditions.checkArgument(!requestedExternalExecutors.contains(ceid),
+          "Duplicate external executor for queue " + name);
+      requestedExternalExecutors.add(ceid);
+      return ceid;
+    }
   }
 }
