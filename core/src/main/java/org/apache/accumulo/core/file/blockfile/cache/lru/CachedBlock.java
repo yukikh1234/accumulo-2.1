@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.blockfile.cache.lru;
 
 import java.util.Objects;
@@ -41,18 +42,9 @@ public class CachedBlock implements HeapSize, Comparable<CachedBlock> {
           + ClassSize.STRING + ClassSize.BYTE_BUFFER + ClassSize.REFERENCE);
 
   public enum BlockPriority {
-    /**
-     * Accessed a single time (used for scan-resistance)
-     */
-    SINGLE,
-    /**
-     * Accessed multiple times
-     */
-    MULTI,
-    /**
-     * Block from in-memory store
-     */
-    MEMORY
+    SINGLE, // Accessed a single time (used for scan-resistance)
+    MULTI, // Accessed multiple times
+    MEMORY // Block from in-memory store
   }
 
   private final byte[] buffer;
@@ -66,16 +58,9 @@ public class CachedBlock implements HeapSize, Comparable<CachedBlock> {
     this.buffer = buf;
     this.blockName = blockName;
     this.accessTime = accessTime;
-    if (inMemory) {
-      this.priority = BlockPriority.MEMORY;
-    } else {
-      this.priority = BlockPriority.SINGLE;
-    }
+    this.priority = inMemory ? BlockPriority.MEMORY : BlockPriority.SINGLE;
   }
 
-  /**
-   * Block has been accessed. Update its local access time.
-   */
   public void access(long accessTime) {
     this.accessTime = accessTime;
     if (this.priority == BlockPriority.SINGLE) {
@@ -85,9 +70,7 @@ public class CachedBlock implements HeapSize, Comparable<CachedBlock> {
 
   @Override
   public long heapSize() {
-    if (recordedSize < 0) {
-      throw new IllegalStateException("Block was evicted: " + blockName);
-    }
+    validateEviction();
     return recordedSize;
   }
 
@@ -103,10 +86,7 @@ public class CachedBlock implements HeapSize, Comparable<CachedBlock> {
 
   @Override
   public int compareTo(CachedBlock that) {
-    if (this.accessTime == that.accessTime) {
-      return 0;
-    }
-    return this.accessTime < that.accessTime ? 1 : -1;
+    return Long.compare(that.accessTime, this.accessTime);
   }
 
   public String getName() {
@@ -126,49 +106,42 @@ public class CachedBlock implements HeapSize, Comparable<CachedBlock> {
     if (index == null && recordedSize >= 0) {
       index = supplier.get();
     }
-
     return (T) index;
   }
 
-  private synchronized long _recordSize(AtomicLong totalSize) {
+  private synchronized long calculateRecordSize() {
     long indexSize = (index == null) ? 0 : index.weight();
-    long newSize = ClassSize.align(blockName.length()) + ClassSize.align(buffer.length)
-        + PER_BLOCK_OVERHEAD + indexSize;
+    return ClassSize.align(blockName.length()) + ClassSize.align(buffer.length) + PER_BLOCK_OVERHEAD
+        + indexSize;
+  }
+
+  private synchronized long updateTotalSize(AtomicLong totalSize, long newSize) {
     long delta = newSize - recordedSize;
     recordedSize = newSize;
     return totalSize.addAndGet(delta);
   }
 
-  /**
-   * Attempt to record size if not evicted.
-   *
-   * @return -1 if evicted
-   */
-  synchronized long tryRecordSize(AtomicLong totalSize) {
-    if (recordedSize >= 0) {
-      return _recordSize(totalSize);
-    }
-
-    return -1;
+  public synchronized long tryRecordSize(AtomicLong totalSize) {
+    return recordedSize < 0 ? -1 : updateTotalSize(totalSize, calculateRecordSize());
   }
 
   public synchronized long recordSize(AtomicLong totalSize) {
-    if (recordedSize >= 0) {
-      return _recordSize(totalSize);
-    }
-
-    throw new IllegalStateException("Block was evicted: " + blockName);
+    validateEviction();
+    return updateTotalSize(totalSize, calculateRecordSize());
   }
 
   public synchronized long evicted(AtomicLong totalSize) {
-    if (recordedSize >= 0) {
-      totalSize.addAndGet(recordedSize * -1);
-      long tmp = recordedSize;
-      recordedSize = -1;
-      index = null;
-      return tmp;
-    }
+    validateEviction();
+    long tmp = recordedSize;
+    totalSize.addAndGet(-recordedSize);
+    recordedSize = -1;
+    index = null;
+    return tmp;
+  }
 
-    throw new IllegalStateException("Block was already evicted: " + blockName);
+  private void validateEviction() {
+    if (recordedSize < 0) {
+      throw new IllegalStateException("Block was evicted: " + blockName);
+    }
   }
 }
