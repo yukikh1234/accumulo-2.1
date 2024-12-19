@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.crypto.streams;
 
 import java.io.DataOutputStream;
@@ -23,33 +24,38 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
-/**
- * Buffers all input in a growing buffer until flush() is called. Then entire buffer is written,
- * with size information, and padding to force the underlying crypto output stream to also fully
- * flush
- */
 public class BlockedOutputStream extends OutputStream {
-  int blockSize;
-  DataOutputStream out;
-  ByteBuffer bb;
+  private final int blockSize;
+  private final DataOutputStream out;
+  private final ByteBuffer bb;
 
   public BlockedOutputStream(OutputStream out, int blockSize, int bufferSize) {
+    validateBufferSize(bufferSize);
+    this.out = initializeOutputStream(out);
+    this.blockSize = blockSize;
+    this.bb = ByteBuffer.allocate(calculateBufferSize(bufferSize, blockSize));
+  }
+
+  private void validateBufferSize(int bufferSize) {
     if (bufferSize <= 0) {
       throw new IllegalArgumentException("bufferSize must be greater than 0.");
     }
+  }
+
+  private DataOutputStream initializeOutputStream(OutputStream out) {
     if (out instanceof DataOutputStream) {
-      this.out = (DataOutputStream) out;
+      return (DataOutputStream) out;
     } else {
-      this.out = new DataOutputStream(out);
+      return new DataOutputStream(out);
     }
-    this.blockSize = blockSize;
+  }
+
+  private int calculateBufferSize(int bufferSize, int blockSize) {
     int remainder = bufferSize % blockSize;
     if (remainder != 0) {
       remainder = blockSize - remainder;
     }
-    // some buffer space + bytes to make the buffer evened up with the cipher block size - 4 bytes
-    // for the size int
-    bb = ByteBuffer.allocate(bufferSize + remainder - 4);
+    return bufferSize + remainder - 4;
   }
 
   @Override
@@ -62,24 +68,23 @@ public class BlockedOutputStream extends OutputStream {
       return;
     }
     out.writeInt(size);
-
-    int remainder = ((size + 4) % blockSize);
-    if (remainder != 0) {
-      remainder = blockSize - remainder;
-    }
-
-    // This is garbage
-    bb.position(size + remainder);
-    out.write(bb.array(), 0, size + remainder);
-
+    int totalSize = size + calculatePaddingSize(size);
+    bb.position(totalSize);
+    out.write(bb.array(), 0, totalSize);
     out.flush();
     bb.rewind();
   }
 
+  private int calculatePaddingSize(int size) {
+    int remainder = (size + 4) % blockSize;
+    if (remainder != 0) {
+      remainder = blockSize - remainder;
+    }
+    return remainder;
+  }
+
   @Override
   public void write(int b) throws IOException {
-    // Checking before provides same functionality but causes the case of previous flush() failing
-    // to now throw a buffer out of bounds error
     if (bb.remaining() == 0) {
       flush();
     }
@@ -88,19 +93,13 @@ public class BlockedOutputStream extends OutputStream {
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
-    // Can't recurse here in case the len is large and the blocksize is small (and the stack is
-    // small)
-    // So we'll just fill up the buffer over and over
     while (len >= bb.remaining()) {
       int remaining = bb.remaining();
       bb.put(b, off, remaining);
-      // This is guaranteed to have the buffer filled, so we'll just flush it. No check needed
       flush();
       off += remaining;
       len -= remaining;
     }
-    // And then write the remainder (and this is guaranteed to not fill the buffer, so we won't
-    // flush afterward
     bb.put(b, off, len);
   }
 
