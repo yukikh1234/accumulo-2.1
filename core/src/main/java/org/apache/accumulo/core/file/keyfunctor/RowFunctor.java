@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -27,35 +28,36 @@ public class RowFunctor implements KeyFunctor {
 
   @Override
   public Key transform(org.apache.accumulo.core.data.Key acuKey) {
-    byte[] keyData;
-
-    ByteSequence row = acuKey.getRowData();
-    keyData = new byte[row.length()];
-    System.arraycopy(row.getBackingArray(), 0, keyData, 0, row.length());
-
-    return new Key(keyData, 1.0);
+    return new Key(copyRowData(acuKey.getRowData()), 1.0);
   }
 
   @Override
   public Key transform(Range range) {
-    if (isRangeInBloomFilter(range, PartialKey.ROW)) {
-      return transform(range.getStartKey());
-    }
-    return null;
+    return (isRangeInBloomFilter(range, PartialKey.ROW)) ? transform(range.getStartKey()) : null;
   }
 
   static boolean isRangeInBloomFilter(Range range, PartialKey keyDepth) {
-
-    if (range.getStartKey() == null || range.getEndKey() == null) {
+    if (isInvalidRange(range)) {
       return false;
     }
-
     if (range.getStartKey().equals(range.getEndKey(), keyDepth)) {
       return true;
     }
+    return isKeyRangeMatching(range, keyDepth) && !range.isEndKeyInclusive();
+  }
 
-    // include everything but the deleted flag in the comparison...
+  private static boolean isInvalidRange(Range range) {
+    return range.getStartKey() == null || range.getEndKey() == null;
+  }
+
+  private static boolean isKeyRangeMatching(Range range, PartialKey keyDepth) {
     return range.getStartKey().followingKey(keyDepth).equals(range.getEndKey(),
-        PartialKey.ROW_COLFAM_COLQUAL_COLVIS_TIME) && !range.isEndKeyInclusive();
+        PartialKey.ROW_COLFAM_COLQUAL_COLVIS_TIME);
+  }
+
+  private static byte[] copyRowData(ByteSequence row) {
+    byte[] keyData = new byte[row.length()];
+    System.arraycopy(row.getBackingArray(), 0, keyData, 0, row.length());
+    return keyData;
   }
 }
