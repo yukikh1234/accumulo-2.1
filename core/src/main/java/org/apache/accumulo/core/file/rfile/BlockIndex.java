@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.io.IOException;
@@ -37,7 +20,6 @@ public class BlockIndex implements Weighable {
 
   public static BlockIndex getIndex(CachedBlockRead cacheBlock, IndexEntry indexEntry)
       throws IOException {
-
     BlockIndex blockIndex = cacheBlock.getIndex(BlockIndex::new);
     if (blockIndex == null) {
       return null;
@@ -45,17 +27,12 @@ public class BlockIndex implements Weighable {
 
     int accessCount = blockIndex.accessCount.incrementAndGet();
 
-    // 1 is a power of two, but do not care about it
     if (accessCount >= 2 && isPowerOfTwo(accessCount)) {
       blockIndex.buildIndex(accessCount, cacheBlock, indexEntry);
       cacheBlock.indexWeightChanged();
     }
 
-    if (blockIndex.blockIndex != null) {
-      return blockIndex;
-    }
-
-    return null;
+    return blockIndex.blockIndex != null ? blockIndex : null;
   }
 
   private static boolean isPowerOfTwo(int x) {
@@ -66,7 +43,6 @@ public class BlockIndex implements Weighable {
   private volatile BlockIndexEntry[] blockIndex = null;
 
   public static class BlockIndexEntry implements Comparable<BlockIndexEntry> {
-
     private final Key prevKey;
     private int entriesLeft;
     private int pos;
@@ -92,10 +68,12 @@ public class BlockIndex implements Weighable {
 
     @Override
     public boolean equals(Object o) {
-      if (o instanceof BlockIndexEntry) {
-        return compareTo((BlockIndexEntry) o) == 0;
-      }
-      return false;
+      if (this == o)
+        return true;
+      if (!(o instanceof BlockIndexEntry))
+        return false;
+      BlockIndexEntry that = (BlockIndexEntry) o;
+      return prevKey.equals(that.prevKey);
     }
 
     @Override
@@ -109,7 +87,7 @@ public class BlockIndex implements Weighable {
 
     @Override
     public int hashCode() {
-      throw new UnsupportedOperationException("hashCode not designed");
+      return prevKey.hashCode();
     }
 
     int weight() {
@@ -120,43 +98,9 @@ public class BlockIndex implements Weighable {
   }
 
   public BlockIndexEntry seekBlock(Key startKey, CachedBlockRead cacheBlock) {
-
-    // get a local ref to the index, another thread could change it
     BlockIndexEntry[] blockIndex = this.blockIndex;
-
     int pos = Arrays.binarySearch(blockIndex, new BlockIndexEntry(startKey));
-
-    int index;
-
-    if (pos < 0) {
-      if (pos == -1) {
-        return null; // less than the first key in index, did not index the first key in block so
-      }
-      // just return null... code calling this will scan from beginning
-      // of block
-      index = (pos * -1) - 2;
-    } else {
-      // found exact key in index
-      index = pos;
-      while (index > 0) {
-        if (blockIndex[index].getPrevKey().equals(startKey)) {
-          index--;
-        } else {
-          break;
-        }
-      }
-    }
-
-    // handle case where multiple keys in block are exactly the same, want to find the earliest key
-    // in the index
-    while (index - 1 > 0) {
-      if (blockIndex[index].getPrevKey().equals(blockIndex[index - 1].getPrevKey())) {
-        index--;
-      } else {
-        break;
-      }
-
-    }
+    int index = determineIndex(pos, startKey, blockIndex);
 
     if (index == 0 && blockIndex[index].getPrevKey().equals(startKey)) {
       return null;
@@ -165,6 +109,31 @@ public class BlockIndex implements Weighable {
     BlockIndexEntry bie = blockIndex[index];
     cacheBlock.seek(bie.pos);
     return bie;
+  }
+
+  private int determineIndex(int pos, Key startKey, BlockIndexEntry[] blockIndex) {
+    if (pos < 0) {
+      return (pos == -1) ? -1 : (pos * -1) - 2;
+    } else {
+      int index = adjustIndexForExactMatch(pos, startKey, blockIndex);
+      return adjustIndexForDuplicateKeys(index, blockIndex);
+    }
+  }
+
+  private int adjustIndexForExactMatch(int pos, Key startKey, BlockIndexEntry[] blockIndex) {
+    int index = pos;
+    while (index > 0 && blockIndex[index].getPrevKey().equals(startKey)) {
+      index--;
+    }
+    return index;
+  }
+
+  private int adjustIndexForDuplicateKeys(int index, BlockIndexEntry[] blockIndex) {
+    while (index - 1 > 0
+        && blockIndex[index].getPrevKey().equals(blockIndex[index - 1].getPrevKey())) {
+      index--;
+    }
+    return index;
   }
 
   private synchronized void buildIndex(int indexEntries, CachedBlockRead cacheBlock,
@@ -176,37 +145,32 @@ public class BlockIndex implements Weighable {
 
     int interval = indexEntry.getNumEntries() / indexEntries;
 
-    if (interval <= 32) {
+    if (interval <= 32 || (blockIndex != null && blockIndex.length > indexEntries - 1)) {
       return;
     }
-
-    // multiple threads could try to create the index with different sizes, do not replace a large
-    // index with a smaller one
-    if (this.blockIndex != null && this.blockIndex.length > indexEntries - 1) {
-      return;
-    }
-
-    int count = 0;
 
     ArrayList<BlockIndexEntry> index = new ArrayList<>(indexEntries - 1);
+    int count = buildIndexEntries(interval, indexEntry, cacheBlock, rk, val, index);
 
+    this.blockIndex = index.toArray(new BlockIndexEntry[0]);
+    cacheBlock.seek(0);
+  }
+
+  private int buildIndexEntries(int interval, IndexEntry indexEntry, CachedBlockRead cacheBlock,
+      RelativeKey rk, Value val, ArrayList<BlockIndexEntry> index) throws IOException {
+    int count = 0;
     while (count < (indexEntry.getNumEntries() - interval + 1)) {
-
-      Key myPrevKey = rk.getKey();
       int pos = cacheBlock.getPosition();
+      Key myPrevKey = rk.getKey();
       rk.readFields(cacheBlock);
       val.readFields(cacheBlock);
 
       if (count > 0 && count % interval == 0) {
         index.add(new BlockIndexEntry(pos, indexEntry.getNumEntries() - count, myPrevKey));
       }
-
       count++;
     }
-
-    this.blockIndex = index.toArray(new BlockIndexEntry[index.size()]);
-
-    cacheBlock.seek(0);
+    return count;
   }
 
   BlockIndexEntry[] getIndexEntries() {
@@ -215,15 +179,19 @@ public class BlockIndex implements Weighable {
 
   @Override
   public synchronized int weight() {
+    int weight = calculateWeight();
+    weight +=
+        ClassSize.ATOMIC_INTEGER + ClassSize.OBJECT + 2 * ClassSize.REFERENCE + ClassSize.ARRAY;
+    return weight;
+  }
+
+  private int calculateWeight() {
     int weight = 0;
     if (blockIndex != null) {
       for (BlockIndexEntry blockIndexEntry : blockIndex) {
         weight += blockIndexEntry.weight();
       }
     }
-
-    weight +=
-        ClassSize.ATOMIC_INTEGER + ClassSize.OBJECT + 2 * ClassSize.REFERENCE + ClassSize.ARRAY;
     return weight;
   }
 }
