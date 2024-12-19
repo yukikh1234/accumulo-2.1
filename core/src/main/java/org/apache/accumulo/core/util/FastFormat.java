@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -25,13 +26,12 @@ import com.google.common.base.Preconditions;
 public class FastFormat {
   private static final byte[] EMPTY_BYTES = new byte[] {};
 
-  // this 7 to 8 times faster than String.format("%s%06d",prefix, num)
   public static byte[] toZeroPaddedString(long num, int width, int radix, byte[] prefix) {
     Preconditions.checkArgument(num >= 0);
     String strNum = Long.toString(num, radix);
     byte[] ret = new byte[Math.max(strNum.length(), width) + prefix.length];
-    if (toZeroPaddedString(ret, 0, strNum, width, prefix) != ret.length) {
-      throw new RuntimeException(" Did not format to expected width " + num + " " + width + " "
+    if (formatNumberWithPrefix(ret, 0, strNum, width, prefix) != ret.length) {
+      throw new RuntimeException("Did not format to expected width " + num + " " + width + " "
           + radix + " " + new String(prefix, UTF_8));
     }
     return ret;
@@ -44,47 +44,45 @@ public class FastFormat {
   public static int toZeroPaddedString(byte[] output, int outputOffset, long num, int width,
       int radix, byte[] prefix) {
     Preconditions.checkArgument(num >= 0);
-
     String strNum = Long.toString(num, radix);
-
-    return toZeroPaddedString(output, outputOffset, strNum, width, prefix);
+    return formatNumberWithPrefix(output, outputOffset, strNum, width, prefix);
   }
 
-  private static int toZeroPaddedString(byte[] output, int outputOffset, String strNum, int width,
-      byte[] prefix) {
-
+  private static int formatNumberWithPrefix(byte[] output, int outputOffset, String strNum,
+      int width, byte[] prefix) {
     int index = outputOffset;
+    index = copyPrefix(output, index, prefix);
+    index = zeroPad(output, index, strNum.length(), width);
+    return copyNumber(output, index, strNum) - outputOffset;
+  }
 
+  private static int copyPrefix(byte[] output, int index, byte[] prefix) {
     for (byte b : prefix) {
       output[index++] = b;
     }
+    return index;
+  }
 
-    int end = width - strNum.length() + index;
-
+  private static int zeroPad(byte[] output, int index, int strNumLength, int width) {
+    int end = width - strNumLength + index;
     while (index < end) {
       output[index++] = '0';
     }
+    return index;
+  }
 
+  private static int copyNumber(byte[] output, int index, String strNum) {
     for (int i = 0; i < strNum.length(); i++) {
       output[index++] = (byte) strNum.charAt(i);
     }
-
-    return index - outputOffset;
+    return index;
   }
 
-  /**
-   * Create a zero padded string from a hexadecimal number. This is a faster replacement for:
-   * String.format("%s%016x%s", PREFIX, tid, SUFFIX);
-   */
   public static String toHexString(String prefix, long hexadecimal, String suffix) {
     return prefix + new String(toZeroPaddedString(hexadecimal, 16, 16, EMPTY_BYTES), UTF_8)
         + suffix;
   }
 
-  /**
-   * Create a zero padded string from a hexadecimal number. This is a faster replacement for:
-   * String.format("%016x", tid)
-   */
   public static String toHexString(long hexadecimal) {
     return toHexString("", hexadecimal, "");
   }
