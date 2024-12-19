@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -43,8 +44,15 @@ public class Version implements KeywordExecutable {
 
   @Override
   public void execute(final String[] args) throws Exception {
-    Class<?> runTMP = Main.getClassLoader().loadClass("org.apache.accumulo.core.Constants");
-    System.out.println(runTMP.getField("VERSION").get(null));
+    Class<?> versionClass = loadVersionClass();
+    printVersion(versionClass);
   }
 
+  private Class<?> loadVersionClass() throws ClassNotFoundException {
+    return Main.getClassLoader().loadClass("org.apache.accumulo.core.Constants");
+  }
+
+  private void printVersion(Class<?> versionClass) throws Exception {
+    System.out.println(versionClass.getField("VERSION").get(null));
+  }
 }
