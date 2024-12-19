@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.io.IOException;
@@ -50,7 +51,6 @@ import com.google.common.base.Preconditions;
 public class RFileOperations extends FileOperations {
 
   private static final Logger LOG = LoggerFactory.getLogger(RFileOperations.class);
-
   private static final Collection<ByteSequence> EMPTY_CF_SET = Collections.emptySet();
 
   private static RFile.Reader getReader(FileOptions options) throws IOException {
@@ -75,11 +75,9 @@ public class RFileOperations extends FileOperations {
   @Override
   protected FileSKVIterator openReader(FileOptions options) throws IOException {
     RFile.Reader reader = getReader(options);
-
     if (options.isSeekToBeginning()) {
       reader.seek(new Range((Key) null, null), EMPTY_CF_SET, false);
     }
-
     return reader;
   }
 
@@ -92,72 +90,88 @@ public class RFileOperations extends FileOperations {
 
   @Override
   protected FileSKVWriter openWriter(FileOptions options) throws IOException {
-
     AccumuloConfiguration acuconf = options.getTableConfiguration();
-
-    long blockSize = acuconf.getAsBytes(Property.TABLE_FILE_COMPRESSED_BLOCK_SIZE);
-    Preconditions.checkArgument((blockSize < Integer.MAX_VALUE && blockSize > 0),
-        "table.file.compress.blocksize must be greater than 0 and less than " + Integer.MAX_VALUE);
-    long indexBlockSize = acuconf.getAsBytes(Property.TABLE_FILE_COMPRESSED_BLOCK_SIZE_INDEX);
-    Preconditions.checkArgument((indexBlockSize < Integer.MAX_VALUE && indexBlockSize > 0),
-        "table.file.compress.blocksize.index must be greater than 0 and less than "
-            + Integer.MAX_VALUE);
+    long blockSize = getValidatedBlockSize(acuconf, Property.TABLE_FILE_COMPRESSED_BLOCK_SIZE);
+    long indexBlockSize =
+        getValidatedBlockSize(acuconf, Property.TABLE_FILE_COMPRESSED_BLOCK_SIZE_INDEX);
 
     SamplerConfigurationImpl samplerConfig = SamplerConfigurationImpl.newSamplerConfig(acuconf);
-    Sampler sampler = null;
+    Sampler sampler = getSampler(samplerConfig, acuconf, options);
 
-    if (samplerConfig != null) {
-      sampler = SamplerFactory.newSampler(samplerConfig, acuconf, options.isAccumuloStartEnabled());
-    }
-
-    String compression = options.getCompression();
-    compression = compression == null
-        ? options.getTableConfiguration().get(Property.TABLE_FILE_COMPRESSION_TYPE) : compression;
+    String compression = getCompression(options);
 
     FSDataOutputStream outputStream = options.getOutputStream();
-
     Configuration conf = options.getConfiguration();
 
     if (outputStream == null) {
-      int hrep = conf.getInt("dfs.replication", 3);
-      int trep = acuconf.getCount(Property.TABLE_FILE_REPLICATION);
-      int rep = hrep;
-      if (trep > 0 && trep != hrep) {
-        rep = trep;
-      }
-      long hblock = conf.getLong("dfs.block.size", 1 << 26);
-      long tblock = acuconf.getAsBytes(Property.TABLE_FILE_BLOCK_SIZE);
-      long block = hblock;
-      if (tblock > 0) {
-        block = tblock;
-      }
-      int bufferSize = conf.getInt("io.file.buffer.size", 4096);
-
-      String file = options.getFilename();
-      FileSystem fs = options.getFileSystem();
-
-      if (options.dropCacheBehind) {
-        EnumSet<CreateFlag> set = EnumSet.of(CreateFlag.SYNC_BLOCK, CreateFlag.CREATE);
-        outputStream = fs.create(new Path(file), FsPermission.getDefault(), set, bufferSize,
-            (short) rep, block, null);
-        try {
-          // Tell the DataNode that the file does not need to be cached in the OS page cache
-          outputStream.setDropBehind(Boolean.TRUE);
-          LOG.trace("Called setDropBehind(TRUE) for stream writing file {}", options.filename);
-        } catch (UnsupportedOperationException e) {
-          LOG.debug("setDropBehind not enabled for file: {}", options.filename);
-        } catch (IOException e) {
-          LOG.debug("IOException setting drop behind for file: {}, msg: {}", options.filename,
-              e.getMessage());
-        }
-      } else {
-        outputStream = fs.create(new Path(file), false, bufferSize, (short) rep, block);
-      }
+      outputStream = createOutputStream(options, acuconf, conf);
     }
 
     BCFile.Writer _cbw = new BCFile.Writer(outputStream, options.getRateLimiter(), compression,
         conf, options.cryptoService);
 
     return new RFile.Writer(_cbw, (int) blockSize, (int) indexBlockSize, samplerConfig, sampler);
+  }
+
+  private long getValidatedBlockSize(AccumuloConfiguration acuconf, Property property) {
+    long blockSize = acuconf.getAsBytes(property);
+    Preconditions.checkArgument((blockSize < Integer.MAX_VALUE && blockSize > 0),
+        property.name() + " must be greater than 0 and less than " + Integer.MAX_VALUE);
+    return blockSize;
+  }
+
+  private Sampler getSampler(SamplerConfigurationImpl samplerConfig, AccumuloConfiguration acuconf,
+      FileOptions options) {
+    if (samplerConfig != null) {
+      return SamplerFactory.newSampler(samplerConfig, acuconf, options.isAccumuloStartEnabled());
+    }
+    return null;
+  }
+
+  private String getCompression(FileOptions options) {
+    String compression = options.getCompression();
+    if (compression == null) {
+      compression = options.getTableConfiguration().get(Property.TABLE_FILE_COMPRESSION_TYPE);
+    }
+    return compression;
+  }
+
+  private FSDataOutputStream createOutputStream(FileOptions options, AccumuloConfiguration acuconf,
+      Configuration conf) throws IOException {
+    int hrep = conf.getInt("dfs.replication", 3);
+    int trep = acuconf.getCount(Property.TABLE_FILE_REPLICATION);
+    int rep = (trep > 0 && trep != hrep) ? trep : hrep;
+
+    long hblock = conf.getLong("dfs.block.size", 1 << 26);
+    long tblock = acuconf.getAsBytes(Property.TABLE_FILE_BLOCK_SIZE);
+    long block = (tblock > 0) ? tblock : hblock;
+
+    int bufferSize = conf.getInt("io.file.buffer.size", 4096);
+
+    String file = options.getFilename();
+    FileSystem fs = options.getFileSystem();
+
+    FSDataOutputStream outputStream;
+    if (options.dropCacheBehind) {
+      EnumSet<CreateFlag> set = EnumSet.of(CreateFlag.SYNC_BLOCK, CreateFlag.CREATE);
+      outputStream = fs.create(new Path(file), FsPermission.getDefault(), set, bufferSize,
+          (short) rep, block, null);
+      setDropBehind(options, outputStream);
+    } else {
+      outputStream = fs.create(new Path(file), false, bufferSize, (short) rep, block);
+    }
+    return outputStream;
+  }
+
+  private void setDropBehind(FileOptions options, FSDataOutputStream outputStream) {
+    try {
+      outputStream.setDropBehind(Boolean.TRUE);
+      LOG.trace("Called setDropBehind(TRUE) for stream writing file {}", options.filename);
+    } catch (UnsupportedOperationException e) {
+      LOG.debug("setDropBehind not enabled for file: {}", options.filename);
+    } catch (IOException e) {
+      LOG.debug("IOException setting drop behind for file: {}, msg: {}", options.filename,
+          e.getMessage());
+    }
   }
 }
