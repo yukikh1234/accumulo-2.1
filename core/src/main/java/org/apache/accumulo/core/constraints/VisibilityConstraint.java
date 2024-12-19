@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -57,51 +58,48 @@ public class VisibilityConstraint
         return "Malformed column visibility";
       case 2:
         return "User does not have authorization on column visibility";
+      default:
+        return null;
     }
-
-    return null;
   }
 
   @Override
   public List<Short> check(Constraint.Environment env, Mutation mutation) {
     List<ColumnUpdate> updates = mutation.getUpdates();
-
-    HashSet<String> ok = null;
-    if (updates.size() > 1) {
-      ok = new HashSet<>();
-    }
-
+    HashSet<String> ok = updates.size() > 1 ? new HashSet<>() : null;
     VisibilityEvaluator ve = null;
 
     for (ColumnUpdate update : updates) {
-
-      byte[] cv = update.getColumnVisibility();
-      if (cv.length > 0) {
-        String key = null;
-        if (ok != null && ok.contains(key = new String(cv, UTF_8))) {
-          continue;
-        }
-
-        try {
-
-          if (ve == null) {
-            ve = new VisibilityEvaluator(env.getAuthorizationsContainer());
-          }
-
-          if (!ve.evaluate(new ColumnVisibility(cv))) {
-            return Collections.singletonList((short) 2);
-          }
-
-        } catch (BadArgumentException | VisibilityParseException bae) {
-          return Collections.singletonList((short) 1);
-        }
-
-        if (ok != null) {
-          ok.add(key);
-        }
+      List<Short> violation = processUpdate(env, update, ok, ve);
+      if (violation != null) {
+        return violation;
       }
     }
+    return null;
+  }
 
+  private List<Short> processUpdate(Constraint.Environment env, ColumnUpdate update,
+      HashSet<String> ok, VisibilityEvaluator ve) {
+    byte[] cv = update.getColumnVisibility();
+    if (cv.length > 0) {
+      String key = null;
+      if (ok != null && ok.contains(key = new String(cv, UTF_8))) {
+        return null;
+      }
+
+      try {
+        ve = (ve == null) ? new VisibilityEvaluator(env.getAuthorizationsContainer()) : ve;
+        if (!ve.evaluate(new ColumnVisibility(cv))) {
+          return Collections.singletonList((short) 2);
+        }
+      } catch (BadArgumentException | VisibilityParseException bae) {
+        return Collections.singletonList((short) 1);
+      }
+
+      if (ok != null) {
+        ok.add(key);
+      }
+    }
     return null;
   }
 }
