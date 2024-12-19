@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -53,12 +54,10 @@ public class SystemIteratorUtil {
   }
 
   public static IteratorConfig toIteratorConfig(List<IteratorSetting> iterators) {
-    ArrayList<TIteratorSetting> tisList = new ArrayList<>();
-
+    List<TIteratorSetting> tisList = new ArrayList<>();
     for (IteratorSetting iteratorSetting : iterators) {
       tisList.add(toTIteratorSetting(iteratorSetting));
     }
-
     return new IteratorConfig(tisList);
   }
 
@@ -67,17 +66,20 @@ public class SystemIteratorUtil {
     for (TIteratorSetting tIteratorSetting : ic.getIterators()) {
       ret.add(toIteratorSetting(tIteratorSetting));
     }
-
     return ret;
   }
 
   public static byte[] encodeIteratorSettings(IteratorConfig iterators) {
     try {
-      TSerializer tser = new TSerializer(new TBinaryProtocol.Factory());
-      return tser.serialize(iterators);
+      return serializeIteratorConfig(iterators);
     } catch (TException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private static byte[] serializeIteratorConfig(IteratorConfig iterators) throws TException {
+    TSerializer tser = new TSerializer(new TBinaryProtocol.Factory());
+    return tser.serialize(iterators);
   }
 
   public static byte[] encodeIteratorSettings(List<IteratorSetting> iterators) {
@@ -87,21 +89,29 @@ public class SystemIteratorUtil {
   public static List<IteratorSetting> decodeIteratorSettings(byte[] enc) {
     IteratorConfig ic = new IteratorConfig();
     try {
-      TDeserializer tdser = new TDeserializer(new TBinaryProtocol.Factory());
-      tdser.deserialize(ic, enc);
+      deserializeIteratorConfig(ic, enc);
     } catch (TException e) {
       throw new RuntimeException(e);
     }
     return toIteratorSettings(ic);
   }
 
+  private static void deserializeIteratorConfig(IteratorConfig ic, byte[] enc) throws TException {
+    TDeserializer tdser = new TDeserializer(new TBinaryProtocol.Factory());
+    tdser.deserialize(ic, enc);
+  }
+
   public static SortedKeyValueIterator<Key,Value> setupSystemScanIterators(
       SortedKeyValueIterator<Key,Value> source, Set<Column> cols, Authorizations auths,
       byte[] defaultVisibility, AccumuloConfiguration conf) throws IOException {
-    SortedKeyValueIterator<Key,Value> delIter =
-        DeletingIterator.wrap(source, false, DeletingIterator.getBehavior(conf));
+    SortedKeyValueIterator<Key,Value> delIter = createDeletingIterator(source, conf);
     ColumnFamilySkippingIterator cfsi = new ColumnFamilySkippingIterator(delIter);
     SortedKeyValueIterator<Key,Value> colFilter = ColumnQualifierFilter.wrap(cfsi, cols);
     return VisibilityFilter.wrap(colFilter, auths, defaultVisibility);
+  }
+
+  private static SortedKeyValueIterator<Key,Value> createDeletingIterator(
+      SortedKeyValueIterator<Key,Value> source, AccumuloConfiguration conf) throws IOException {
+    return DeletingIterator.wrap(source, false, DeletingIterator.getBehavior(conf));
   }
 }
