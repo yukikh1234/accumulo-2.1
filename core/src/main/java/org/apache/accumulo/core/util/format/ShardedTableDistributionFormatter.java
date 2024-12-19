@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util.format;
 
 import java.util.HashMap;
@@ -40,22 +23,29 @@ public class ShardedTableDistributionFormatter extends AggregatingFormatter {
 
   @Override
   protected void aggregateStats(Entry<Key,Value> entry) {
-    if (entry.getKey().getColumnFamily().toString().equals("~tab")
-        && entry.getKey().getColumnQualifier().toString().equals("loc")) {
-      // The row for the sharded table should look like: <tableId>;yyyyMMhh_N
-      String row = entry.getKey().getRow().toString();
-      // Parse the day out of the row
-      int semicolon = row.indexOf(";");
-      String day = null;
-      if (semicolon == -1) {
-        day = "NULL    ";
-      } else {
-        semicolon++;
-        day = row.substring(semicolon, semicolon + 8);
-      }
+    if (isRelevantEntry(entry)) {
+      String day = parseDay(entry.getKey().getRow().toString());
       String server = entry.getValue().toString();
-      countsByDay.computeIfAbsent(day, k -> new HashSet<>()).add(server);
+      addServerToDay(day, server);
     }
+  }
+
+  private boolean isRelevantEntry(Entry<Key,Value> entry) {
+    return entry.getKey().getColumnFamily().toString().equals("~tab")
+        && entry.getKey().getColumnQualifier().toString().equals("loc");
+  }
+
+  private String parseDay(String row) {
+    int semicolon = row.indexOf(";");
+    if (semicolon == -1) {
+      return "NULL    ";
+    } else {
+      return row.substring(semicolon + 1, semicolon + 9);
+    }
+  }
+
+  private void addServerToDay(String day, String server) {
+    countsByDay.computeIfAbsent(day, k -> new HashSet<>()).add(server);
   }
 
   @Override
@@ -63,10 +53,9 @@ public class ShardedTableDistributionFormatter extends AggregatingFormatter {
     StringBuilder buf = new StringBuilder();
     buf.append("DAY   \t\tSERVERS\n");
     buf.append("------\t\t-------\n");
-    for (String day : countsByDay.keySet()) {
-      buf.append(day + "\t\t" + countsByDay.get(day).size() + "\n");
+    for (Map.Entry<String,HashSet<String>> entry : countsByDay.entrySet()) {
+      buf.append(entry.getKey()).append("\t\t").append(entry.getValue().size()).append("\n");
     }
     return buf.toString();
   }
-
 }
