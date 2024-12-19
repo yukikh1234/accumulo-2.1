@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -47,20 +48,31 @@ public class GuavaRateLimiter implements RateLimiter {
    *        is taken to indicate that there should be no limitation on rate.
    */
   public void setRate(long newRate) {
+    validateNewRate(newRate);
     this.rateLimiter.setRate(newRate > 0 ? newRate : Long.MAX_VALUE);
     this.currentRate = newRate;
+  }
+
+  private void validateNewRate(long newRate) {
+    if (newRate < 0) {
+      throw new IllegalArgumentException("Rate must be non-negative");
+    }
   }
 
   @Override
   public void acquire(long numPermits) {
     if (this.currentRate > 0) {
-      while (numPermits > Integer.MAX_VALUE) {
-        rateLimiter.acquire(Integer.MAX_VALUE);
-        numPermits -= Integer.MAX_VALUE;
-      }
-      if (numPermits > 0) {
-        rateLimiter.acquire((int) numPermits);
-      }
+      acquirePermits(numPermits);
+    }
+  }
+
+  private void acquirePermits(long numPermits) {
+    while (numPermits > Integer.MAX_VALUE) {
+      rateLimiter.acquire(Integer.MAX_VALUE);
+      numPermits -= Integer.MAX_VALUE;
+    }
+    if (numPermits > 0) {
+      rateLimiter.acquire((int) numPermits);
     }
   }
 }
