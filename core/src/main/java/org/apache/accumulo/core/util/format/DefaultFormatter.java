@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.util.format;
 
 import java.text.DateFormat;
@@ -70,55 +53,25 @@ public class DefaultFormatter implements Formatter {
     }
   }
 
-  /**
-   * if showTimestamps, will use {@link FormatterConfig.DefaultDateFormat}.<br>
-   * Preferably, use
-   * {@link DefaultFormatter#formatEntry(java.util.Map.Entry, org.apache.accumulo.core.util.format.FormatterConfig)}
-   */
   public static String formatEntry(Entry<Key,Value> entry, boolean showTimestamps) {
-    DateFormat timestampFormat = null;
-
-    if (showTimestamps) {
-      timestampFormat = formatter.get();
-    }
-
+    DateFormat timestampFormat = showTimestamps ? formatter.get() : null;
     return formatEntry(entry, timestampFormat);
   }
 
-  /* so a new date object doesn't get created for every record in the scan result */
   private static final ThreadLocal<Date> tmpDate = ThreadLocal.withInitial(Date::new);
 
-  /** Does not show timestamps if timestampFormat is null */
   public static String formatEntry(Entry<Key,Value> entry, DateFormat timestampFormat) {
     StringBuilder sb = new StringBuilder();
     Key key = entry.getKey();
     Text buffer = new Text();
 
-    // append row
-    appendText(sb, key.getRow(buffer)).append(" ");
+    appendKeyComponents(sb, key, buffer);
 
-    // append column family
-    appendText(sb, key.getColumnFamily(buffer)).append(":");
-
-    // append column qualifier
-    appendText(sb, key.getColumnQualifier(buffer)).append(" ");
-
-    // append visibility expression
-    sb.append(new ColumnVisibility(key.getColumnVisibility(buffer)));
-
-    // append timestamp
     if (timestampFormat != null) {
-      tmpDate.get().setTime(entry.getKey().getTimestamp());
-      sb.append(" ").append(timestampFormat.format(tmpDate.get()));
+      appendTimestamp(sb, entry, timestampFormat);
     }
 
-    Value value = entry.getValue();
-
-    // append value
-    if (value != null && value.getSize() > 0) {
-      sb.append("\t");
-      appendValue(sb, value);
-    }
+    appendValue(sb, entry);
 
     return sb.toString();
   }
@@ -128,32 +81,57 @@ public class DefaultFormatter implements Formatter {
   }
 
   public static String formatEntry(Entry<Key,Value> entry, FormatterConfig config) {
-    // originally from BinaryFormatter
     StringBuilder sb = new StringBuilder();
     Key key = entry.getKey();
     Text buffer = new Text();
 
     final int shownLength = config.getShownLength();
 
+    appendKeyComponents(sb, key, buffer, shownLength);
+
+    if (config.willPrintTimestamps() && config.getDateFormatSupplier() != null) {
+      appendTimestamp(sb, entry, config.getDateFormatSupplier().get());
+    }
+
+    appendValue(sb, entry, shownLength);
+
+    return sb.toString();
+  }
+
+  private static void appendKeyComponents(StringBuilder sb, Key key, Text buffer) {
+    appendText(sb, key.getRow(buffer)).append(" ");
+    appendText(sb, key.getColumnFamily(buffer)).append(":");
+    appendText(sb, key.getColumnQualifier(buffer)).append(" ");
+    sb.append(new ColumnVisibility(key.getColumnVisibility(buffer)));
+  }
+
+  private static void appendKeyComponents(StringBuilder sb, Key key, Text buffer, int shownLength) {
     appendText(sb, key.getRow(buffer), shownLength).append(" ");
     appendText(sb, key.getColumnFamily(buffer), shownLength).append(":");
     appendText(sb, key.getColumnQualifier(buffer), shownLength).append(" ");
     sb.append(new ColumnVisibility(key.getColumnVisibility(buffer)));
+  }
 
-    // append timestamp
-    if (config.willPrintTimestamps() && config.getDateFormatSupplier() != null) {
-      tmpDate.get().setTime(entry.getKey().getTimestamp());
-      sb.append(" ").append(config.getDateFormatSupplier().get().format(tmpDate.get()));
+  private static void appendTimestamp(StringBuilder sb, Entry<Key,Value> entry,
+      DateFormat timestampFormat) {
+    tmpDate.get().setTime(entry.getKey().getTimestamp());
+    sb.append(" ").append(timestampFormat.format(tmpDate.get()));
+  }
+
+  private static void appendValue(StringBuilder sb, Entry<Key,Value> entry) {
+    Value value = entry.getValue();
+    if (value != null && value.getSize() > 0) {
+      sb.append("\t");
+      appendValue(sb, value);
     }
+  }
 
-    // append value
+  private static void appendValue(StringBuilder sb, Entry<Key,Value> entry, int shownLength) {
     Value value = entry.getValue();
     if (value != null && value.getSize() > 0) {
       sb.append("\t");
       appendValue(sb, value, shownLength);
     }
-    return sb.toString();
-
   }
 
   static StringBuilder appendText(StringBuilder sb, Text t) {
@@ -189,7 +167,7 @@ public class DefaultFormatter implements Formatter {
   static StringBuilder appendBytes(StringBuilder sb, byte[] ba, int offset, int len,
       int shownLength) {
     int length = Math.min(len, shownLength);
-    return DefaultFormatter.appendBytes(sb, ba, offset, length);
+    return appendBytes(sb, ba, offset, length);
   }
 
   public Iterator<Entry<Key,Value>> getScannerIterator() {
@@ -199,5 +177,4 @@ public class DefaultFormatter implements Formatter {
   protected boolean isDoTimestamps() {
     return config.willPrintTimestamps();
   }
-
 }
