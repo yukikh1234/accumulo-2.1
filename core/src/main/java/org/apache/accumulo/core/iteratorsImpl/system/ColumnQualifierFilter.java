@@ -16,6 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.util.HashMap;
@@ -39,17 +58,7 @@ public class ColumnQualifierFilter extends ServerFilter {
     super(iterator);
     this.columnFamilies = new HashSet<>();
     this.columnsQualifiers = new HashMap<>();
-
-    columns.forEach(col -> {
-      if (col.columnQualifier != null) {
-        this.columnsQualifiers
-            .computeIfAbsent(new ArrayByteSequence(col.columnQualifier), k -> new HashSet<>())
-            .add(new ArrayByteSequence(col.columnFamily));
-      } else {
-        // this whole column family should pass
-        columnFamilies.add(new ArrayByteSequence(col.columnFamily));
-      }
-    });
+    processColumns(columns);
   }
 
   private ColumnQualifierFilter(SortedKeyValueIterator<Key,Value> iterator,
@@ -60,6 +69,18 @@ public class ColumnQualifierFilter extends ServerFilter {
     this.columnsQualifiers = columnsQualifiers;
   }
 
+  private void processColumns(Set<Column> columns) {
+    columns.forEach(col -> {
+      if (col.columnQualifier != null) {
+        this.columnsQualifiers
+            .computeIfAbsent(new ArrayByteSequence(col.columnQualifier), k -> new HashSet<>())
+            .add(new ArrayByteSequence(col.columnFamily));
+      } else {
+        columnFamilies.add(new ArrayByteSequence(col.columnFamily));
+      }
+    });
+  }
+
   @Override
   public boolean accept(Key key, Value v) {
     if (columnFamilies.contains(key.getColumnFamilyData())) {
@@ -67,9 +88,6 @@ public class ColumnQualifierFilter extends ServerFilter {
     }
 
     HashSet<ByteSequence> cfset = columnsQualifiers.get(key.getColumnQualifierData());
-    // ensure the column qualifier goes with a paired column family,
-    // it is possible that a column qualifier could occur with a
-    // column family it was not paired with
     return cfset != null && cfset.contains(key.getColumnFamilyData());
   }
 
@@ -80,18 +98,19 @@ public class ColumnQualifierFilter extends ServerFilter {
 
   public static SortedKeyValueIterator<Key,Value> wrap(SortedKeyValueIterator<Key,Value> source,
       Set<Column> cols) {
-    boolean sawNonNullQual = false;
-    for (Column col : cols) {
-      if (col.getColumnQualifier() != null) {
-        sawNonNullQual = true;
-        break;
-      }
-    }
-
-    if (sawNonNullQual) {
+    if (containsNonNullQualifiers(cols)) {
       return new ColumnQualifierFilter(source, cols);
     } else {
       return source;
     }
+  }
+
+  private static boolean containsNonNullQualifiers(Set<Column> cols) {
+    for (Column col : cols) {
+      if (col.getColumnQualifier() != null) {
+        return true;
+      }
+    }
+    return false;
   }
 }
