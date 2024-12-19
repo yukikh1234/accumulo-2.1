@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,87 +43,91 @@ public class MapFileIterator implements FileSKVIterator {
   private static final String MSG = "Map files are not supported";
 
   public MapFileIterator(FileSystem fs, String dir, Configuration conf) {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public void setInterruptFlag(AtomicBoolean flag) {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
       IteratorEnvironment env) {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public boolean hasTop() {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public void next() {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive) {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public Key getTopKey() {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public Value getTopValue() {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public SortedKeyValueIterator<Key,Value> deepCopy(IteratorEnvironment env) {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public Key getFirstKey() {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public Key getLastKey() {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public DataInputStream getMetaStore(String name) {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public long estimateOverlappingEntries(KeyExtent extent) throws IOException {
-    throw new UnsupportedOperationException();
+    return unsupportedOperation();
   }
 
   @Override
   public void closeDeepCopies() {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public void close() {
-    throw new UnsupportedOperationException(MSG);
+    unsupportedOperation();
   }
 
   @Override
   public FileSKVIterator getSample(SamplerConfigurationImpl sampleConfig) {
-    throw new UnsupportedOperationException(MSG);
+    return unsupportedOperation();
   }
 
   @Override
   public void setCacheProvider(CacheProvider cacheProvider) {
+    unsupportedOperation();
+  }
+
+  private <T> T unsupportedOperation() {
     throw new UnsupportedOperationException(MSG);
   }
 }
