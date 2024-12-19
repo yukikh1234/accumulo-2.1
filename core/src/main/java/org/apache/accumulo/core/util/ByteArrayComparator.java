@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -26,18 +27,20 @@ public class ByteArrayComparator implements Comparator<byte[]>, Serializable {
 
   @Override
   public int compare(byte[] o1, byte[] o2) {
+    int lengthComparison = Integer.compare(o1.length, o2.length);
+    if (lengthComparison != 0) {
+      return lengthComparison;
+    }
 
-    int minLen = Math.min(o1.length, o2.length);
-
-    for (int i = 0; i < minLen; i++) {
+    for (int i = 0; i < o1.length; i++) {
       int a = (o1[i] & 0xff);
       int b = (o2[i] & 0xff);
 
       if (a != b) {
-        return a - b;
+        return Integer.compare(a, b);
       }
     }
 
-    return o1.length - o2.length;
+    return 0;
   }
 }
