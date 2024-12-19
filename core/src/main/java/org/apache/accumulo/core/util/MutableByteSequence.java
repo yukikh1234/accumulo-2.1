@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -36,12 +37,20 @@ public class MutableByteSequence extends ArrayByteSequence {
   }
 
   public void setArray(byte[] data, int offset, int len) {
+    if (data == null)
+      throw new IllegalArgumentException("Data array cannot be null");
+    if (offset < 0 || len < 0 || offset + len > data.length) {
+      throw new IllegalArgumentException("Invalid offset or length");
+    }
     this.data = data;
     this.offset = offset;
     this.length = len;
   }
 
   public void setLength(int len) {
+    if (len < 0 || offset + len > data.length) {
+      throw new IllegalArgumentException("Invalid length");
+    }
     this.length = len;
   }
 }
