@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.file.rfile;
 
 import java.io.IOException;
@@ -240,16 +241,7 @@ public class PrintInfo implements KeywordExecutable {
           }
         }
 
-        BiFunction<Key,Value,String> formatter = null;
-        if (opts.formatterClazz != null) {
-          final Class<? extends BiFunction<Key,Value,String>> formatterClass =
-              getFormatter(opts.formatterClazz);
-          formatter = formatterClass.getConstructor().newInstance();
-        } else if (opts.fullKeys) {
-          formatter = (key, value) -> key.toStringNoTruncate() + " -> " + value;
-        } else if (opts.dump) {
-          formatter = (key, value) -> key + " -> " + value;
-        }
+        BiFunction<Key,Value,String> formatter = getFormatter(opts);
 
         for (String lgName : localityGroupCF.keySet()) {
           LocalityGroupUtil.seek(dataIter, new Range(), lgName, localityGroupCF);
@@ -305,6 +297,19 @@ public class PrintInfo implements KeywordExecutable {
         return;
       }
     }
+  }
+
+  private BiFunction<Key,Value,String> getFormatter(Opts opts) throws Exception {
+    if (opts.formatterClazz != null) {
+      final Class<? extends BiFunction<Key,Value,String>> formatterClass =
+          getFormatter(opts.formatterClazz);
+      return formatterClass.getConstructor().newInstance();
+    } else if (opts.fullKeys) {
+      return (key, value) -> key.toStringNoTruncate() + " -> " + value;
+    } else if (opts.dump) {
+      return (key, value) -> key + " -> " + value;
+    }
+    return null;
   }
 
   public static FileSystem resolveFS(Logger log, Configuration conf, Path file) throws IOException {
