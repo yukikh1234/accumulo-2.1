@@ -1,21 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+
 package org.apache.accumulo.core.iteratorsImpl.system;
 
 import java.io.IOException;
@@ -46,8 +29,7 @@ public abstract class HeapIterator implements SortedKeyValueIterator<Key,Value> 
     if (heap != null) {
       throw new IllegalStateException("heap already exist");
     }
-
-    heap = new PriorityQueue<>(maxSize == 0 ? 1 : maxSize,
+    heap = new PriorityQueue<>(Math.max(maxSize, 1),
         (si1, si2) -> si1.getTopKey().compareTo(si2.getTopKey()));
   }
 
@@ -71,42 +53,34 @@ public abstract class HeapIterator implements SortedKeyValueIterator<Key,Value> 
     if (topIdx == null) {
       throw new IllegalStateException("Called next() when there is no top");
     }
-
     topIdx.next();
     if (topIdx.hasTop()) {
-      if (nextKey == null) {
-        // topIdx is the only iterator
-        return;
-      }
-
-      if (nextKey.compareTo(topIdx.getTopKey()) < 0) {
-        // Grab the next top iterator and put the current top iterator back on the heap
-        // This updating of references is special-cased to save on percolation on edge cases
-        // since the current top is guaranteed to not be the minimum
-        SortedKeyValueIterator<Key,Value> nextTopIdx = heap.remove();
-        heap.add(topIdx);
-
-        topIdx = nextTopIdx;
-        nextKey = heap.peek().getTopKey();
-      }
+      handleNextWithTop();
     } else {
-      if (nextKey == null) {
-        // No iterators left
-        topIdx = null;
-        return;
-      }
+      handleNextWithoutTop();
+    }
+  }
 
+  private void handleNextWithTop() {
+    if (nextKey != null && nextKey.compareTo(topIdx.getTopKey()) < 0) {
+      SortedKeyValueIterator<Key,Value> nextTopIdx = heap.remove();
+      heap.add(topIdx);
+      topIdx = nextTopIdx;
+      nextKey = heap.peek().getTopKey();
+    }
+  }
+
+  private void handleNextWithoutTop() {
+    if (nextKey == null) {
+      topIdx = null;
+    } else {
       pullReferencesFromHeap();
     }
   }
 
   private void pullReferencesFromHeap() {
     topIdx = heap.remove();
-    if (heap.isEmpty()) {
-      nextKey = null;
-    } else {
-      nextKey = heap.peek().getTopKey();
-    }
+    nextKey = heap.isEmpty() ? null : heap.peek().getTopKey();
   }
 
   protected final void clear() {
@@ -121,7 +95,6 @@ public abstract class HeapIterator implements SortedKeyValueIterator<Key,Value> 
       if (topIdx != null) {
         heap.add(topIdx);
       }
-
       pullReferencesFromHeap();
     }
   }
