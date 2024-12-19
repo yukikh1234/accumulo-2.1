@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -23,7 +24,30 @@ import java.util.regex.PatternSyntaxException;
 public final class BadArgumentException extends PatternSyntaxException {
   private static final long serialVersionUID = 1L;
 
+  // Constructor with parameter validation
   public BadArgumentException(String desc, String badarg, int index) {
-    super(desc, badarg, index);
+    super(validateDescription(desc), validateBadArg(badarg), validateIndex(index));
+  }
+
+  // Private static methods for validation
+  private static String validateDescription(String desc) {
+    if (desc == null || desc.isEmpty()) {
+      throw new IllegalArgumentException("Description cannot be null or empty");
+    }
+    return desc;
+  }
+
+  private static String validateBadArg(String badarg) {
+    if (badarg == null || badarg.isEmpty()) {
+      throw new IllegalArgumentException("Bad argument cannot be null or empty");
+    }
+    return badarg;
+  }
+
+  private static int validateIndex(int index) {
+    if (index < 0) {
+      throw new IllegalArgumentException("Index cannot be negative");
+    }
+    return index;
   }
 }
