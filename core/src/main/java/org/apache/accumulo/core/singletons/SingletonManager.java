@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.accumulo.core.singletons;
 
 import java.util.ArrayList;
@@ -27,51 +28,12 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-/**
- * This class automates management of static singletons that maintain state for Accumulo clients.
- * Historically, Accumulo client code that used Connector had no control over these singletons. The
- * new AccumuloClient API that replaces Connector is closeable. When all AccumuloClients are closed
- * then resources used by the singletons are released. This class coordinates releasing those
- * resources. For compatibility purposes this class will not release resources when the user has
- * created Connectors.
- *
- * <p>
- * This class is intermediate solution to resource management. Ideally there would be no static
- * state and AccumuloClients would own all of their state and clean it up on close. If
- * AccumuloClient is not closable at inception, then it is harder to make it closable later. If
- * AccumuloClient is not closable, then its hard to remove the static state. This class enables
- * making AccumuloClient closable at inception so that static state can be removed later.
- *
- */
 public class SingletonManager {
 
   private static final Logger log = LoggerFactory.getLogger(SingletonManager.class);
 
-  /**
-   * These enums determine the behavior of the SingletonManager.
-   *
-   */
   public enum Mode {
-    /**
-     * In this mode singletons are disabled when the number of active client reservations goes to
-     * zero.
-     */
-    CLIENT,
-    /**
-     * In this mode singletons are never disabled, unless the CLOSED mode is entered.
-     */
-    SERVER,
-    /**
-     * In this mode singletons are never disabled unless the mode is set back to CLIENT. The user
-     * can do this by using util.CleanUp (an old API created for users).
-     */
-    CONNECTOR,
-    /**
-     * In this mode singletons are permanently disabled and entering this mode prevents
-     * transitioning to other modes.
-     */
-    CLOSED
-
+    CLIENT, SERVER, CONNECTOR, CLOSED
   }
 
   private static long reservations;
@@ -93,45 +55,23 @@ public class SingletonManager {
     reset();
   }
 
-  private static void enable(SingletonService service) {
+  private static void manageService(SingletonService service, boolean enable) {
     try {
-      service.enable();
+      if (enable) {
+        service.enable();
+      } else {
+        service.disable();
+      }
     } catch (RuntimeException e) {
-      log.error("Failed to enable singleton service", e);
+      log.error("Failed to " + (enable ? "enable" : "disable") + " singleton service", e);
     }
   }
 
-  private static void disable(SingletonService service) {
-    try {
-      service.disable();
-    } catch (RuntimeException e) {
-      log.error("Failed to disable singleton service", e);
-    }
-  }
-
-  /**
-   * Register a static singleton that should be disabled and enabled as needed.
-   */
   public static synchronized void register(SingletonService service) {
-    if (enabled && !service.isEnabled()) {
-      enable(service);
-    }
-
-    if (!enabled && service.isEnabled()) {
-      disable(service);
-    }
-
+    manageService(service, enabled);
     services.add(service);
   }
 
-  /**
-   * This method should be called when creating Accumulo clients using the public API. Accumulo
-   * clients created internally within Accumulo code should probably call
-   * {@link SingletonReservation#noop()} instead. While a client holds a reservation, singleton
-   * services are enabled.
-   *
-   * @return A reservation that must be closed when the AccumuloClient is closed.
-   */
   public static synchronized SingletonReservation getClientReservation() {
     Preconditions.checkState(reservations >= 0);
     reservations++;
@@ -150,36 +90,27 @@ public class SingletonManager {
     return reservations;
   }
 
-  /**
-   * Change how singletons are managed. The default mode is {@link Mode#CLIENT}
-   */
-  public static synchronized void setMode(Mode mode) {
-    if (SingletonManager.mode == mode) {
+  public static synchronized void setMode(Mode newMode) {
+    if (mode == newMode) {
       return;
     }
-    if (SingletonManager.mode == Mode.CLOSED) {
+    if (mode == Mode.CLOSED) {
       throw new IllegalStateException("Cannot leave closed mode once entered");
     }
-    if (SingletonManager.mode == Mode.CLIENT && mode == Mode.CONNECTOR) {
-      if (transitionedFromClientToConnector) {
-        throw new IllegalStateException("Can only transition from " + Mode.CLIENT + " to "
-            + Mode.CONNECTOR + " once.  This error indicates that "
-            + "org.apache.accumulo.core.util.CleanUp.shutdownNow() was called and then later a "
-            + "Connector was created.  Connectors can not be created after CleanUp.shutdownNow()"
-            + " is called.");
-      }
-
-      transitionedFromClientToConnector = true;
+    if (mode == Mode.CLIENT && newMode == Mode.CONNECTOR) {
+      handleClientToConnectorTransition();
     }
-
-    /*
-     * Always allow transition to closed and only allow transition to client/connector when the
-     * current mode is not server.
-     */
-    if (SingletonManager.mode != Mode.SERVER || mode == Mode.CLOSED) {
-      SingletonManager.mode = mode;
+    if (mode != Mode.SERVER || newMode == Mode.CLOSED) {
+      mode = newMode;
     }
     transition();
+  }
+
+  private static void handleClientToConnectorTransition() {
+    if (transitionedFromClientToConnector) {
+      throw new IllegalStateException("Can only transition from CLIENT to CONNECTOR once.");
+    }
+    transitionedFromClientToConnector = true;
   }
 
   @VisibleForTesting
@@ -188,23 +119,11 @@ public class SingletonManager {
   }
 
   private static void transition() {
-    if (enabled) {
-      // if we're in an enabled state AND
-      // the mode is CLOSED or there are no active clients,
-      // then disable everything
-      if (mode == Mode.CLOSED || (mode == Mode.CLIENT && reservations == 0)) {
-        services.forEach(SingletonManager::disable);
-        enabled = false;
-      }
-    } else {
-      // if we're in a disabled state AND
-      // the mode is CONNECTOR or SERVER or if there are active clients,
-      // then enable everything
-      if (mode == Mode.CONNECTOR || mode == Mode.SERVER
-          || (mode == Mode.CLIENT && reservations > 0)) {
-        services.forEach(SingletonManager::enable);
-        enabled = true;
-      }
+    boolean shouldEnable = (mode == Mode.CONNECTOR || mode == Mode.SERVER
+        || (mode == Mode.CLIENT && reservations > 0));
+    if (enabled != shouldEnable) {
+      services.forEach(service -> manageService(service, shouldEnable));
+      enabled = shouldEnable;
     }
   }
 }
