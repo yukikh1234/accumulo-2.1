@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -26,27 +27,34 @@ import org.apache.hadoop.util.bloom.Key;
 public class ColumnQualifierFunctor implements KeyFunctor {
 
   @Override
-  public org.apache.hadoop.util.bloom.Key transform(org.apache.accumulo.core.data.Key acuKey) {
-    byte[] keyData;
+  public Key transform(org.apache.accumulo.core.data.Key acuKey) {
+    byte[] keyData = extractKeyData(acuKey);
+    return new Key(keyData, 1.0);
+  }
 
+  private byte[] extractKeyData(org.apache.accumulo.core.data.Key acuKey) {
     ByteSequence row = acuKey.getRowData();
     ByteSequence cf = acuKey.getColumnFamilyData();
     ByteSequence cq = acuKey.getColumnQualifierData();
-    keyData = new byte[row.length() + cf.length() + cq.length()];
-    System.arraycopy(row.getBackingArray(), row.offset(), keyData, 0, row.length());
-    System.arraycopy(cf.getBackingArray(), cf.offset(), keyData, row.length(), cf.length());
-    System.arraycopy(cq.getBackingArray(), cq.offset(), keyData, row.length() + cf.length(),
-        cq.length());
 
-    return new org.apache.hadoop.util.bloom.Key(keyData, 1.0);
+    byte[] keyData = new byte[row.length() + cf.length() + cq.length()];
+    int offset = 0;
+
+    offset = copyByteSequence(row, keyData, offset);
+    offset = copyByteSequence(cf, keyData, offset);
+    copyByteSequence(cq, keyData, offset);
+
+    return keyData;
+  }
+
+  private int copyByteSequence(ByteSequence seq, byte[] dest, int offset) {
+    System.arraycopy(seq.getBackingArray(), seq.offset(), dest, offset, seq.length());
+    return offset + seq.length();
   }
 
   @Override
   public Key transform(Range range) {
-    if (RowFunctor.isRangeInBloomFilter(range, PartialKey.ROW_COLFAM_COLQUAL)) {
-      return transform(range.getStartKey());
-    }
-    return null;
+    return RowFunctor.isRangeInBloomFilter(range, PartialKey.ROW_COLFAM_COLQUAL)
+        ? transform(range.getStartKey()) : null;
   }
-
 }
