@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -29,12 +30,22 @@ import io.opentelemetry.context.Scope;
 /**
  * A class to wrap {@link Callable}s for {@link ThreadPools} in a way that still provides access to
  * the wrapped {@link Callable} instance. This supersedes the use of {@link Context#wrap(Callable)}.
+ *
+ * @param <V> the result type of method call
  */
 class TraceWrappedCallable<V> implements Callable<V> {
 
   private final Context context;
   private final Callable<V> unwrapped;
 
+  /**
+   * Recursively unwraps a {@link Callable} that might be wrapped inside multiple layers of
+   * {@link TraceWrappedCallable}.
+   *
+   * @param c the {@link Callable} to unwrap
+   * @param <C> the result type of the callable
+   * @return the innermost wrapped {@link Callable}
+   */
   static <C> Callable<C> unwrapFully(Callable<C> c) {
     while (c instanceof TraceWrappedCallable) {
       c = ((TraceWrappedCallable<C>) c).unwrapped;
@@ -42,11 +53,22 @@ class TraceWrappedCallable<V> implements Callable<V> {
     return c;
   }
 
+  /**
+   * Constructs a {@link TraceWrappedCallable} and unwraps the provided {@link Callable}.
+   *
+   * @param other the {@link Callable} to be wrapped
+   */
   TraceWrappedCallable(Callable<V> other) {
     this.context = Context.current();
     this.unwrapped = unwrapFully(other);
   }
 
+  /**
+   * Executes the wrapped {@link Callable} within the current context.
+   *
+   * @return the result of the wrapped {@link Callable} call
+   * @throws Exception if the wrapped callable throws an exception
+   */
   @Override
   public V call() throws Exception {
     try (Scope unused = context.makeCurrent()) {
@@ -54,20 +76,31 @@ class TraceWrappedCallable<V> implements Callable<V> {
     }
   }
 
+  /**
+   * Determines whether the specified object is equal to the current instance.
+   *
+   * @param obj the object to compare with the current instance
+   * @return true if the specified object is equal to the current instance; false otherwise
+   */
   @Override
   public boolean equals(Object obj) {
     if (this == obj) {
       return true;
     }
-    if (obj instanceof TraceWrappedCallable) {
-      return Objects.equals(unwrapped, ((TraceWrappedCallable<?>) obj).unwrapped);
+    if (!(obj instanceof TraceWrappedCallable)) {
+      return false;
     }
-    return false;
+    TraceWrappedCallable<?> other = (TraceWrappedCallable<?>) obj;
+    return Objects.equals(unwrapped, other.unwrapped);
   }
 
+  /**
+   * Returns the hash code for the current instance.
+   *
+   * @return the hash code of the wrapped {@link Callable}
+   */
   @Override
   public int hashCode() {
-    return unwrapped.hashCode();
+    return Objects.hashCode(unwrapped);
   }
-
 }
