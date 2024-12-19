@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -32,25 +33,28 @@ public class ShutdownUtil {
     } catch (IllegalStateException ise) {
       return true;
     }
-
     return false;
   }
 
   public static boolean isIOException(Throwable e) {
-    if (e == null) {
-      return false;
-    }
+    return e != null
+        && (isDirectIOException(e) || isSuppressedIOException(e) || isCauseIOException(e));
+  }
 
-    if (e instanceof IOException) {
-      return true;
-    }
+  private static boolean isDirectIOException(Throwable e) {
+    return e instanceof IOException;
+  }
 
+  private static boolean isSuppressedIOException(Throwable e) {
     for (Throwable suppressed : e.getSuppressed()) {
       if (isIOException(suppressed)) {
         return true;
       }
     }
+    return false;
+  }
 
+  private static boolean isCauseIOException(Throwable e) {
     return isIOException(e.getCause());
   }
 
