@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -11,8 +12,8 @@
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -35,7 +36,7 @@ public class CryptoUtils {
    * Read the decryption parameters from the DataInputStream
    */
   public static byte[] readParams(DataInputStream in) throws IOException {
-    Objects.requireNonNull(in);
+    Objects.requireNonNull(in, "DataInputStream cannot be null");
     int len = in.readInt();
     byte[] decryptionParams = new byte[len];
     IOUtils.readFully(in, decryptionParams);
@@ -48,11 +49,14 @@ public class CryptoUtils {
    */
   public static FileDecrypter getFileDecrypter(CryptoService cs, CryptoEnvironment.Scope scope,
       TableId tableId, DataInputStream in) throws IOException {
+    Objects.requireNonNull(cs, "CryptoService cannot be null");
     return cs.getFileDecrypter(getCryptoEnv(scope, tableId, in));
   }
 
   public static CryptoEnvironment getCryptoEnv(CryptoEnvironment.Scope scope, TableId tableId,
       DataInputStream in) throws IOException {
+    Objects.requireNonNull(scope, "Scope cannot be null");
+    Objects.requireNonNull(tableId, "TableId cannot be null");
     byte[] decryptionParams = readParams(in);
     return new CryptoEnvironmentImpl(scope, tableId, decryptionParams);
   }
@@ -61,8 +65,8 @@ public class CryptoUtils {
    * Write the decryption parameters to the DataOutputStream
    */
   public static void writeParams(byte[] decryptionParams, DataOutputStream out) throws IOException {
-    Objects.requireNonNull(decryptionParams);
-    Objects.requireNonNull(out);
+    Objects.requireNonNull(decryptionParams, "Decryption parameters cannot be null");
+    Objects.requireNonNull(out, "DataOutputStream cannot be null");
     out.writeInt(decryptionParams.length);
     out.write(decryptionParams);
   }
