@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -53,13 +54,14 @@ public class FormatterConfig {
   }
 
   public FormatterConfig() {
-    this.setPrintTimestamps(false);
-    this.doNotLimitShowLength();
+    this.printTimestamps = false;
+    this.shownLength = Integer.MAX_VALUE;
     this.dateFormatSupplier = DateFormatSupplier.createDefaultFormatSupplier();
   }
 
   /**
-   * Copies most fields, but still points to other.dateFormatSupplier.
+   * Copy constructor for FormatterConfig. Copies most fields, but still points to other's
+   * dateFormatSupplier.
    */
   public FormatterConfig(FormatterConfig other) {
     this.printTimestamps = other.printTimestamps;
@@ -81,13 +83,14 @@ public class FormatterConfig {
   }
 
   public boolean willLimitShowLength() {
-    return this.shownLength != Integer.MAX_VALUE;
+    return shownLength != Integer.MAX_VALUE;
   }
 
   /**
-   * If given a negative number, throws an {@link IllegalArgumentException}
+   * Sets the maximum length of formatted output. If given a negative number, throws an
+   * {@link IllegalArgumentException}
    *
-   * @param shownLength maximum length of formatted output
+   * @param shownLength maximum length of formatted output, must be non-negative
    * @return {@code this} to allow chaining of set methods
    */
   public FormatterConfig setShownLength(int shownLength) {
@@ -106,9 +109,11 @@ public class FormatterConfig {
   }
 
   /**
-   * this.dateFormatSupplier points to dateFormatSupplier, so it is recommended that you create a
-   * new {@code Supplier} when calling this function if your {@code Supplier} maintains some kind of
-   * state (see {@link DateFormatSupplier}.
+   * Sets the date format supplier for this config. It is recommended to provide a new
+   * {@code Supplier} if your {@code Supplier} maintains some kind of state.
+   *
+   * @param dateFormatSupplier the date format supplier
+   * @return {@code this} to allow chaining of set methods
    */
   public FormatterConfig setDateFormatSupplier(Supplier<DateFormat> dateFormatSupplier) {
     this.dateFormatSupplier = dateFormatSupplier;
